@@ -16,7 +16,7 @@ test('市场前缀按沪深北代码返回', () => {
 test('报告引擎为上升趋势生成完整评分和校验项', () => {
   const result = reportFrom({ code: '002594', name: '示例股', price: 19.5, volumeRatio: 1.8, turnoverPct: 3 }, candles);
   assert.equal(result.candles.length, 80);
-  assert.equal(result.checks.length, 8);
+  assert.equal(result.checks.length, 12);
   assert.ok(result.score >= 65);
   assert.ok(result.metrics.ma60 > 0);
 });

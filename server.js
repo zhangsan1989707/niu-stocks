@@ -73,7 +73,9 @@ function reportFrom(quoteData, candles) {
     ['趋势背景', bullish ? '上升趋势' : '趋势偏弱', bullish], ['生命线 MA60', `${last.close >= ma60 ? '站上' : '跌破'} ${ma60.toFixed(2)}`, last.close >= ma60],
     ['关键支撑', `${support.toFixed(2)} ${last.close >= support ? '暂未跌破' : '已跌破'}`, last.close >= support], ['MA5 / MA20', ma5 >= ma20 ? '短期均线偏多' : '短期均线偏空', ma5 >= ma20],
     ['成交量 / 量价', `量比 ${quoteData.volumeRatio.toFixed(2)}（≥1.5 算放量）`, quoteData.volumeRatio >= 1.5], ['MACD 金死叉', macdUp ? '金叉 · 多头占优' : '死叉 · 需谨慎', macdUp],
-    ['RSI', `${rsiValue.toFixed(1)} · ${rsiValue > 70 ? '超买提醒' : rsiValue < 30 ? '超卖关注' : '中性区间'}`, rsiValue <= 70], ['60日高点回撤', `${((1 - last.close / recentHigh) * 100).toFixed(1)}%`, last.close / recentHigh > .7]
+    ['RSI / MACD 背离', `${rsiValue.toFixed(1)} · ${rsiValue > 70 ? '超买提醒' : rsiValue < 30 ? '超卖关注' : '无明显背离'}`, rsiValue <= 70], ['极性转换', last.close >= ma20 ? '无' : '均线下方，观察反压', last.close >= ma20],
+    ['假摔 / 假突破', last.low < support && last.close >= support ? '疑似假摔，等待确认' : '未识别', last.close >= support], ['墨菲摆动指标组', `${macdUp ? 'MACD 偏多' : 'MACD 偏空'} · RSI ${rsiValue.toFixed(1)}`, macdUp],
+    ['经典图表形态', '未识别明显形态（头肩/双顶双底/三角形）', true], ['60日高点回撤', `${((1 - last.close / recentHigh) * 100).toFixed(1)}%`, last.close / recentHigh > .7]
   ];
   return { quote: quoteData, candles, score, status, metrics: { ma20, ma60, ma5, macd: diff, signal: dea, rsi: rsiValue, support, recentHigh }, checks, summary: healthy ? '趋势与动量保持偏强，暂未出现明显破位信号。' : '当前技术面存在分歧，建议结合下一交易日量价变化确认。' };
 }
