@@ -1,13 +1,12 @@
 const http = require('node:http');
 const { readFile, writeFile, mkdir } = require('node:fs/promises');
-const { createHmac, randomUUID, randomBytes, scryptSync, timingSafeEqual } = require('node:crypto');
+const { randomUUID } = require('node:crypto');
 const { join, extname } = require('node:path');
 
 const PORT = Number(process.env.PORT || 4317);
 const ROOT = __dirname;
 const DATA_DIR = join(ROOT, 'data');
 const DB_FILE = join(DATA_DIR, 'local.json');
-const SECRET = process.env.APP_SECRET || 'replace-this-local-secret-before-deploying';
 const STATIC = join(ROOT, 'public');
 const STOCKS = [
   ['600519', '贵州茅台'], ['000858', '五粮液'], ['002594', '比亚迪'], ['601138', '工业富联'],
@@ -19,21 +18,10 @@ const type = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascri
 async function loadDb() {
   await mkdir(DATA_DIR, { recursive: true });
   try { return JSON.parse(await readFile(DB_FILE, 'utf8')); }
-  catch { return { users: [], feedback: [], favorites: [] }; }
+  catch { return { feedback: [], favorites: [] }; }
 }
 async function saveDb(db) { await writeFile(DB_FILE, JSON.stringify(db, null, 2)); }
 function json(res, status, data) { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); }
-function hash(value, salt = randomBytes(16).toString('hex')) { return `${salt}:${scryptSync(value, salt, 64).toString('hex')}`; }
-function verifyHash(value, stored) { const [salt, digest] = String(stored).split(':'); if (!salt || !digest) return false; return timingSafeEqual(Buffer.from(digest, 'hex'), scryptSync(value, salt, 64)); }
-function parseCookies(req) { return Object.fromEntries((req.headers.cookie || '').split(';').map(x => x.trim().split('=')).filter(x => x.length === 2)); }
-function sign(value) { return createHmac('sha256', SECRET).update(value).digest('hex'); }
-function currentUser(req, db) {
-  const token = parseCookies(req).shs; if (!token) return null;
-  const [id, sig] = token.split('.');
-  if (!id || !sig || !timingSafeEqual(Buffer.from(sign(id)), Buffer.from(sig))) return null;
-  return db.users.find(user => user.id === id) || null;
-}
-function setSession(res, user) { res.setHeader('set-cookie', `shs=${user.id}.${sign(user.id)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`); }
 function body(req) { return new Promise((resolve, reject) => { let raw = ''; req.on('data', chunk => raw += chunk); req.on('end', () => { try { resolve(raw ? JSON.parse(raw) : {}); } catch { reject(new Error('请求格式不正确')); } }); req.on('error', reject); }); }
 function market(code) { return code.startsWith('6') || code.startsWith('9') ? 'sh' : code.startsWith('8') ? 'bj' : 'sz'; }
 function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
@@ -93,22 +81,18 @@ async function stockReport(code) { const normalized = String(code).replace(/\D/g
 function route(path) { return path === '/' ? '/index.html' : path; }
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`); const db = await loadDb(); const user = currentUser(req, db);
+  const url = new URL(req.url, `http://${req.headers.host}`); const db = await loadDb();
   try {
-    if (req.method === 'GET' && url.pathname === '/api/session') return json(res, 200, { user: user && { id: user.id, phone: user.phone } });
-    if (req.method === 'POST' && url.pathname === '/api/register') { const { phone, password } = await body(req); if (!/^1\d{10}$/.test(phone || '') || String(password || '').length < 6) return json(res, 400, { error: '请输入有效手机号和至少 6 位密码' }); if (db.users.some(x => x.phone === phone)) return json(res, 409, { error: '该手机号已注册' }); const next = { id: randomUUID(), phone, passwordHash: hash(password), createdAt: new Date().toISOString() }; db.users.push(next); await saveDb(db); setSession(res, next); return json(res, 201, { user: { id: next.id, phone } }); }
-    if (req.method === 'POST' && url.pathname === '/api/login') { const { phone, password } = await body(req); const account = db.users.find(x => x.phone === phone && verifyHash(password || '', x.passwordHash)); if (!account) return json(res, 401, { error: '手机号或密码不正确' }); setSession(res, account); return json(res, 200, { user: { id: account.id, phone: account.phone } }); }
-    if (req.method === 'POST' && url.pathname === '/api/logout') { res.setHeader('set-cookie', 'shs=; HttpOnly; Path=/; Max-Age=0'); return json(res, 200, { ok: true }); }
     if (req.method === 'GET' && url.pathname === '/api/stocks/search') { const q = (url.searchParams.get('q') || '').trim(); const matches = STOCKS.filter(x => x[0].includes(q) || x[1].includes(q)).slice(0, 8).map(([code, name]) => ({ code, name })); if (/^\d{6}$/.test(q) && !matches.some(x => x.code === q)) { try { const current = await quote(q); matches.unshift({ code: q, name: current.name }); } catch {} } return json(res, 200, { stocks: matches }); }
     if (req.method === 'GET' && /^\/api\/stocks\/\d{6}\/report$/.test(url.pathname)) return json(res, 200, await stockReport(url.pathname.split('/')[3]));
     if (req.method === 'GET' && url.pathname === '/api/screen') { const reports = await Promise.allSettled(STOCKS.slice(0, 8).map(([code]) => stockReport(code))); const candidates = reports.filter(x => x.status === 'fulfilled').map(x => x.value).filter(x => x.score >= 60).sort((a,b) => b.score - a.score).map(x => ({ code: x.quote.code, name: x.quote.name, price: x.quote.price, changePct: x.quote.changePct, score: x.score, volumeRatio: x.quote.volumeRatio, status: x.status })); return json(res, 200, { updatedAt: new Date().toISOString(), candidates }); }
-    if (url.pathname === '/api/favorites') { if (!user) return json(res, 401, { error: '请先登录' }); if (req.method === 'GET') return json(res, 200, { favorites: db.favorites.filter(x => x.userId === user.id) }); const { code, name } = await body(req); if (!/^\d{6}$/.test(code || '')) return json(res, 400, { error: '股票代码不正确' }); if (!db.favorites.some(x => x.userId === user.id && x.code === code)) { db.favorites.push({ id: randomUUID(), userId: user.id, code, name, createdAt: new Date().toISOString() }); await saveDb(db); } return json(res, 201, { ok: true }); }
-    if (req.method === 'DELETE' && /^\/api\/favorites\/\d{6}$/.test(url.pathname)) { if (!user) return json(res, 401, { error: '请先登录' }); db.favorites = db.favorites.filter(x => !(x.userId === user.id && x.code === url.pathname.split('/').at(-1))); await saveDb(db); return json(res, 200, { ok: true }); }
-    if (url.pathname === '/api/feedback') { if (req.method === 'GET') return json(res, 200, { feedback: db.feedback.slice(-30).reverse() }); const { message } = await body(req); if (!String(message || '').trim() || message.length > 500) return json(res, 400, { error: '反馈内容需为 1–500 字' }); db.feedback.push({ id: randomUUID(), message: message.trim(), author: user ? user.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') : '匿名用户', createdAt: new Date().toISOString() }); await saveDb(db); return json(res, 201, { ok: true }); }
+    if (url.pathname === '/api/favorites') { if (req.method === 'GET') return json(res, 200, { favorites: db.favorites }); const { code, name } = await body(req); if (!/^\d{6}$/.test(code || '')) return json(res, 400, { error: '股票代码不正确' }); if (!db.favorites.some(x => x.code === code)) { db.favorites.push({ id: randomUUID(), code, name, createdAt: new Date().toISOString() }); await saveDb(db); } return json(res, 201, { ok: true }); }
+    if (req.method === 'DELETE' && /^\/api\/favorites\/\d{6}$/.test(url.pathname)) { db.favorites = db.favorites.filter(x => x.code !== url.pathname.split('/').at(-1)); await saveDb(db); return json(res, 200, { ok: true }); }
+    if (url.pathname === '/api/feedback') { if (req.method === 'GET') return json(res, 200, { feedback: db.feedback.slice(-30).reverse() }); const { message } = await body(req); if (!String(message || '').trim() || message.length > 500) return json(res, 400, { error: '反馈内容需为 1–500 字' }); db.feedback.push({ id: randomUUID(), message: message.trim(), author: '本机用户', createdAt: new Date().toISOString() }); await saveDb(db); return json(res, 201, { ok: true }); }
     if (req.method === 'GET') { const file = join(STATIC, route(url.pathname)); if (!file.startsWith(STATIC)) return json(res, 403, { error: 'Forbidden' }); try { const content = await readFile(file); res.writeHead(200, { 'content-type': type[extname(file)] || 'application/octet-stream' }); return res.end(content); } catch { const html = await readFile(join(STATIC, 'index.html')); res.writeHead(200, { 'content-type': type['.html'] }); return res.end(html); } }
     json(res, 404, { error: 'Not found' });
   } catch (error) { json(res, 502, { error: error.message || '服务暂不可用，请稍后重试' }); }
 });
 if (require.main === module) server.listen(PORT, () => console.log(`牛股体检站运行于 http://localhost:${PORT}`));
 
-module.exports = { reportFrom, hash, verifyHash, market };
+module.exports = { reportFrom, market };
