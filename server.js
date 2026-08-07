@@ -3,7 +3,7 @@ const { readFile, writeFile, mkdir } = require('node:fs/promises');
 const { createHmac, randomUUID, randomBytes, scryptSync, timingSafeEqual } = require('node:crypto');
 const { join, extname } = require('node:path');
 
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || 4317);
 const ROOT = __dirname;
 const DATA_DIR = join(ROOT, 'data');
 const DB_FILE = join(DATA_DIR, 'local.json');
