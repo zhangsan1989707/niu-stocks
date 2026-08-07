@@ -1,6 +1,6 @@
 const http = require('node:http');
 const { readFile, writeFile, mkdir } = require('node:fs/promises');
-const { createHash, createHmac, randomUUID, timingSafeEqual } = require('node:crypto');
+const { createHmac, randomUUID, randomBytes, scryptSync, timingSafeEqual } = require('node:crypto');
 const { join, extname } = require('node:path');
 
 const PORT = Number(process.env.PORT || 3000);
@@ -23,7 +23,8 @@ async function loadDb() {
 }
 async function saveDb(db) { await writeFile(DB_FILE, JSON.stringify(db, null, 2)); }
 function json(res, status, data) { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); }
-function hash(value) { return createHash('sha256').update(value).digest('hex'); }
+function hash(value, salt = randomBytes(16).toString('hex')) { return `${salt}:${scryptSync(value, salt, 64).toString('hex')}`; }
+function verifyHash(value, stored) { const [salt, digest] = String(stored).split(':'); if (!salt || !digest) return false; return timingSafeEqual(Buffer.from(digest, 'hex'), scryptSync(value, salt, 64)); }
 function parseCookies(req) { return Object.fromEntries((req.headers.cookie || '').split(';').map(x => x.trim().split('=')).filter(x => x.length === 2)); }
 function sign(value) { return createHmac('sha256', SECRET).update(value).digest('hex'); }
 function currentUser(req, db) {
@@ -96,7 +97,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && url.pathname === '/api/session') return json(res, 200, { user: user && { id: user.id, phone: user.phone } });
     if (req.method === 'POST' && url.pathname === '/api/register') { const { phone, password } = await body(req); if (!/^1\d{10}$/.test(phone || '') || String(password || '').length < 6) return json(res, 400, { error: '请输入有效手机号和至少 6 位密码' }); if (db.users.some(x => x.phone === phone)) return json(res, 409, { error: '该手机号已注册' }); const next = { id: randomUUID(), phone, passwordHash: hash(password), createdAt: new Date().toISOString() }; db.users.push(next); await saveDb(db); setSession(res, next); return json(res, 201, { user: { id: next.id, phone } }); }
-    if (req.method === 'POST' && url.pathname === '/api/login') { const { phone, password } = await body(req); const account = db.users.find(x => x.phone === phone && x.passwordHash === hash(password || '')); if (!account) return json(res, 401, { error: '手机号或密码不正确' }); setSession(res, account); return json(res, 200, { user: { id: account.id, phone: account.phone } }); }
+    if (req.method === 'POST' && url.pathname === '/api/login') { const { phone, password } = await body(req); const account = db.users.find(x => x.phone === phone && verifyHash(password || '', x.passwordHash)); if (!account) return json(res, 401, { error: '手机号或密码不正确' }); setSession(res, account); return json(res, 200, { user: { id: account.id, phone: account.phone } }); }
     if (req.method === 'POST' && url.pathname === '/api/logout') { res.setHeader('set-cookie', 'shs=; HttpOnly; Path=/; Max-Age=0'); return json(res, 200, { ok: true }); }
     if (req.method === 'GET' && url.pathname === '/api/stocks/search') { const q = (url.searchParams.get('q') || '').trim(); const matches = STOCKS.filter(x => x[0].includes(q) || x[1].includes(q)).slice(0, 8).map(([code, name]) => ({ code, name })); if (/^\d{6}$/.test(q) && !matches.some(x => x.code === q)) { try { const current = await quote(q); matches.unshift({ code: q, name: current.name }); } catch {} } return json(res, 200, { stocks: matches }); }
     if (req.method === 'GET' && /^\/api\/stocks\/\d{6}\/report$/.test(url.pathname)) return json(res, 200, await stockReport(url.pathname.split('/')[3]));
@@ -110,4 +111,4 @@ const server = http.createServer(async (req, res) => {
 });
 if (require.main === module) server.listen(PORT, () => console.log(`牛股体检站运行于 http://localhost:${PORT}`));
 
-module.exports = { reportFrom, hash, market };
+module.exports = { reportFrom, hash, verifyHash, market };

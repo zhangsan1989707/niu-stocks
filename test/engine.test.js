@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { reportFrom, hash, market } = require('../server');
+const { reportFrom, hash, verifyHash, market } = require('../server');
 
 const candles = Array.from({ length: 80 }, (_, index) => {
   const close = 10 + index * .12;
@@ -21,7 +21,9 @@ test('报告引擎为上升趋势生成完整评分和校验项', () => {
   assert.ok(result.metrics.ma60 > 0);
 });
 
-test('密码哈希结果稳定且不暴露明文', () => {
-  assert.equal(hash('password123'), hash('password123'));
-  assert.notEqual(hash('password123'), 'password123');
+test('密码以随机加盐 scrypt 保存并可正确验证', () => {
+  const stored = hash('password123');
+  assert.notEqual(stored, 'password123');
+  assert.ok(verifyHash('password123', stored));
+  assert.equal(verifyHash('wrong-password', stored), false);
 });
