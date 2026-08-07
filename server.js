@@ -37,13 +37,21 @@ function body(req) { return new Promise((resolve, reject) => { let raw = ''; req
 function market(code) { return code.startsWith('6') || code.startsWith('9') ? 'sh' : code.startsWith('8') ? 'bj' : 'sz'; }
 function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 async function requestText(url, encoding = 'utf-8') { const response = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 StockHealthStation/1.0' }, signal: AbortSignal.timeout(8000) }); if (!response.ok) throw new Error(`行情服务返回 ${response.status}`); return new TextDecoder(encoding).decode(await response.arrayBuffer()); }
-async function quote(code) {
+async function tencentQuote(code) {
   const text = await requestText(`https://qt.gtimg.cn/q=${market(code)}${code}`, 'gbk');
   const values = (text.match(/"([^"]*)"/) || [, ''])[1].split('~');
   if (values.length < 50 || !values[1]) throw new Error('未找到该股票');
-  return { code, name: values[1], price: number(values[3]), previousClose: number(values[4]), open: number(values[5]), volume: number(values[6]), high: number(values[33]), low: number(values[34]), change: number(values[31]), changePct: number(values[32]), amountWan: number(values[37]), turnoverPct: number(values[38]), pe: number(values[39]), marketCapYi: number(values[44]), pb: number(values[46]), volumeRatio: number(values[49]), updatedAt: values[30] || '' };
+  return { code, name: values[1], price: number(values[3]), previousClose: number(values[4]), open: number(values[5]), volume: number(values[6]), high: number(values[33]), low: number(values[34]), change: number(values[31]), changePct: number(values[32]), amountWan: number(values[37]), turnoverPct: number(values[38]), pe: number(values[39]), marketCapYi: number(values[44]), pb: number(values[46]), volumeRatio: number(values[49]), updatedAt: values[30] || '', source: '腾讯财经' };
 }
-async function klines(code) {
+async function eastmoneyQuote(code) {
+  const secid = `${market(code) === 'sh' ? 1 : 0}.${code}`;
+  const text = await requestText(`https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fltt=2&invt=2&fields=f57,f58,f43,f44,f45,f46,f47,f48,f50,f51,f52,f116,f162,f167,f168,f170`);
+  const data = JSON.parse(text).data;
+  if (!data?.f58) throw new Error('备用行情源未找到该股票');
+  return { code, name: data.f58, price: number(data.f43), previousClose: number(data.f60), open: number(data.f46), volume: number(data.f47), high: number(data.f44), low: number(data.f45), change: number(data.f51), changePct: number(data.f170), amountWan: number(data.f48) / 10000, turnoverPct: number(data.f168), pe: number(data.f162), marketCapYi: number(data.f116) / 1e8, pb: number(data.f167), volumeRatio: number(data.f50), updatedAt: new Date().toISOString(), source: '东方财富' };
+}
+async function quote(code) { try { return await tencentQuote(code); } catch { return eastmoneyQuote(code); } }
+async function tencentKlines(code) {
   const prefix = market(code);
   const text = await requestText(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${prefix}${code},day,,,320,qfq`);
   const payload = JSON.parse(text).data?.[`${prefix}${code}`];
@@ -51,6 +59,14 @@ async function klines(code) {
   if (!rows.length) throw new Error('K线数据暂不可用');
   return rows.map(row => ({ date: row[0], open: number(row[1]), close: number(row[2]), high: number(row[3]), low: number(row[4]), volume: number(row[5]) }));
 }
+async function eastmoneyKlines(code) {
+  const secid = `${market(code) === 'sh' ? 1 : 0}.${code}`;
+  const text = await requestText(`https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt=1&beg=0&end=20500000&lmt=320`);
+  const rows = JSON.parse(text).data?.klines || [];
+  if (!rows.length) throw new Error('备用K线源暂不可用');
+  return rows.map(row => { const x = row.split(','); return { date:x[0], open:number(x[1]), close:number(x[2]), high:number(x[3]), low:number(x[4]), volume:number(x[5]) }; });
+}
+async function klines(code) { try { return await tencentKlines(code); } catch { return eastmoneyKlines(code); } }
 function average(values, count) { const subset = values.slice(-count); return subset.length ? subset.reduce((a, b) => a + b, 0) / subset.length : 0; }
 function ema(values, days) { const k = 2 / (days + 1); return values.reduce((acc, value) => acc.length ? [...acc, value * k + acc.at(-1) * (1 - k)] : [value], []); }
 function reportFrom(quoteData, candles) {
