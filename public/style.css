@@ -952,6 +952,123 @@ footer {
 
 
 
+
+/* ========== Verdict Card (结论卡) ========== */
+.verdict {
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: flex;
+  gap: 13px;
+  align-items: flex-start;
+  margin: 12px 0;
+  border: 1px solid;
+  box-shadow: var(--shadow-sm);
+}
+.verdict.red { background: var(--red-soft); border-color: var(--red-line); }
+.verdict.yellow { background: var(--amber-soft); border-color: var(--amber-line); }
+.verdict.green { background: var(--good-soft); border-color: var(--good-line); }
+.verdict .em { font-size: 30px; line-height: 1.1; flex-shrink: 0; }
+.verdict .vt { font-size: 18px; font-weight: 800; margin-bottom: 2px; }
+.verdict.red .vt { color: var(--red); }
+.verdict.yellow .vt { color: var(--amber); }
+.verdict.green .vt { color: var(--good); }
+.verdict .vs { font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+.verdict .vs b { font-weight: 700; }
+
+/* ========== Health Score (健康分) ========== */
+.health {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 12px;
+}
+.health .hnum {
+  font-family: var(--mono);
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.health .hnum small { font-size: 15px; color: var(--muted); font-weight: 400; }
+.health .hmid { flex: 1; min-width: 0; }
+.health .hband { font-weight: 800; font-size: 14px; margin-bottom: 8px; color: var(--ink); }
+.hbar {
+  height: 10px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #e07368 0%, #e9b24d 48%, #56b487 100%);
+  position: relative;
+}
+.hbar .mk {
+  position: absolute;
+  top: -4px;
+  width: 5px;
+  height: 18px;
+  background: var(--ink);
+  border-radius: 3px;
+  transform: translateX(-50%);
+  box-shadow: 0 0 0 2px #fff, 0 2px 6px rgba(0,0,0,.2);
+}
+.hticks { font-size: 10.5px; color: var(--faint); margin-top: 5px; display: flex; justify-content: space-between; }
+.health.red .hnum { color: var(--red); }
+.health.yellow .hnum { color: var(--amber); }
+.health.green .hnum { color: var(--good); }
+
+/* ========== Calc Note (计分说明) ========== */
+.calcnote {
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  padding: 9px 13px;
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+.calcnote b { color: var(--ink); }
+
+/* ========== Check Done Badge (信任徽章) ========== */
+.checkdone {
+  font-size: 13px;
+  color: var(--good);
+  background: var(--good-soft);
+  border: 1px solid var(--good-line);
+  border-radius: var(--radius-sm);
+  padding: 8px 13px;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+/* ========== Scan Header (体检总览) ========== */
+.scanhdr {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  background: var(--blue-soft);
+  border: 1px solid var(--blue-line);
+  border-radius: var(--radius-sm);
+  padding: 10px 13px;
+  margin: 12px 0 4px;
+  line-height: 1.55;
+}
+.scanhdr b { color: var(--blue-dark); }
+
+/* ========== Metrics Grid (指标网格) ========== */
+.metrics { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 11px; }
+.metric {
+  flex: 1;
+  min-width: 90px;
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+}
+.metric .ml { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.metric .mv { font-size: 16px; font-weight: 700; font-family: var(--mono); color: var(--ink); }
+
+
 /* ========== Tooltip ========== */
 .has-tip { cursor: help; position: relative; }
 .patchip.has-tip:hover, .dimrow2.has-tip:hover { filter: brightness(.95); }

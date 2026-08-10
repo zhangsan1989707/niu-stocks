@@ -339,27 +339,53 @@ function checkPage() {
 }
 
 function renderReport(data) {
-  layout('个股体检', `<div class="result-title"><div><h2>${escape(data.name)} <small>${data.code}</small></h2><p>数据更新时间：${escape(data.quote.updatedAt || data.last_date || '最近交易日')}</p></div><button id="back" class="outline">重新体检</button></div>
-    <div class="overview"><div><span>最新价</span><b class="${data.quote.changePct >= 0 ? 'up' : 'down'}">${number(data.last_close || data.quote.price)}</b><em>${data.quote.changePct >= 0 ? '+' : ''}${number(data.quote.changePct)}%</em></div>
-    <div><span>技术健康分</span><b class="score s${Math.floor(data.health/10)}">${data.health}</b><em>${data.band}</em></div>
-    <div><span>量比</span><b>${number(data.vol_ratio || data.quote.volumeRatio)}</b><em>换手 ${number(data.quote.turnoverPct)}%</em></div>
-    <div><span>市值</span><b>${number(data.quote.marketCapYi)} 亿</b><em>PE ${number(data.quote.pe)}</em></div></div>
+  // 结论卡三色映射
+  const lightMeta = { red: { em: '🔴', w: '技术风险高' }, yellow: { em: '🟡', w: '信号不明' }, green: { em: '🟢', w: '技术较稳' } }[data.light] || { em: '⚪', w: '—' };
+  const trendTxt = { up: '上升趋势', down: '下降趋势', range: '横盘震荡' }[data.trend] || '—';
+  // 计分公式：基准 50 + 各项分数
+  const sumPts = (data.factors || []).reduce((s, f) => s + f.pts, 0);
+  const rawScore = 50 + sumPts;
+  let calcNote = `🧮 基准 50 分 ＋ 体检各项 ${sumPts >= 0 ? '+' : ''}${sumPts} ＝ ${rawScore} 分`;
+  if (data.is_powei && data.health <= 22) calcNote += `；⚠️ 破位封顶（破位时最高只给 22 分）→ <b>${data.health} 分</b>`;
+  else if (rawScore > 100) calcNote += `（不高于 100）→ <b>${data.health} 分</b>`;
+  else if (rawScore < 0) calcNote += `（不低于 0）→ <b>${data.health} 分</b>`;
+  // 形态计分
+  const patternPts = (data.factors || []).filter(f => f.dim === 'pattern').reduce((s, f) => s + f.pts, 0);
+  const patScoreHtml = patternPts !== 0 ? `<span style="font-weight:800;font-family:ui-monospace,monospace;color:${patternPts > 0 ? 'var(--good)' : 'var(--red)'}">（计 ${patternPts > 0 ? '+' + patternPts : patternPts} 分）</span>` : '';
+
+  layout('个股体检', `
+    <div class="result-title"><div><h2>${escape(data.name)} <small>${data.code}</small></h2><p>数据更新时间：${escape(data.quote.updatedAt || data.last_date || '最近交易日')}</p></div><button id="back" class="outline">重新体检</button></div>
+    <div class="verdict ${data.light}"><div class="em">${lightMeta.em}</div><div><div class="vt">${data.band} · ${lightMeta.w}</div><div class="vs">${escape(data.headline || data.summary)}${data.is_powei && data.powei_reason ? '<br><b>说人话：</b>' + escape(data.powei_reason) + '，破位用<b>收盘价</b>判定，是真跌不是盘中假摔。' : ''}</div></div></div>
+    <div class="health ${data.light}"><div class="hnum">${data.health}<small>/100</small></div><div class="hmid"><div class="hband">技术健康分 · ${data.band}</div><div class="hbar"><span class="mk" style="left:${data.health}%"></span></div><div class="hticks"><span>0 危险</span><span>45</span><span>65</span><span>健康 100</span></div></div></div>
+    <div class="calcnote">${calcNote}</div>
+    <div class="checkdone">✓ 已逐项核验 ${data.pat_scanned || 29} 种蜡烛形态 ＋ 12 类技术维度</div>
     <div class="report-grid"><article class="card"><h2>趋势与价格</h2><div id="chart" class="chart"></div>
-    <div class="legend" style="display:flex;gap:13px;flex-wrap:wrap;font-size:11px;color:#76819a;padding:2px 6px 8px"><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#d8584d;vertical-align:middle;margin-right:3px"></span>红=涨</i><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#3a9e6e;vertical-align:middle;margin-right:3px"></span>绿=跌</i><i><span style="display:inline-block;width:9px;height:2px;background:#4f6cae;vertical-align:middle;margin-right:3px"></span>蓝线=MA60</i><i><span style="display:inline-block;width:9px;height:2px;background:#c9922e;vertical-align:middle;margin-right:3px"></span>金线=均量5</i></div>
-    <p class="summary">${escape(data.headline || data.summary)}</p></article>
+    <div class="legend" style="display:flex;gap:13px;flex-wrap:wrap;font-size:11px;color:#76819a;padding:2px 6px 8px"><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#d8584d;vertical-align:middle;margin-right:3px"></span>红=涨</i><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#3a9e6e;vertical-align:middle;margin-right:3px"></span>绿=跌</i><i><span style="display:inline-block;width:9px;height:2px;background:#4f6cae;vertical-align:middle;margin-right:3px"></span>蓝线=MA60</i><i><span style="display:inline-block;width:9px;height:2px;background:#c9922e;vertical-align:middle;margin-right:3px"></span>金线=均量5</i><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#d8584d;vertical-align:middle;margin-right:3px"></span>红虚线=支撑</i><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#9aa6bd;vertical-align:middle;margin-right:3px"></span>灰虚线=压力</i></div>
+    <div class="metrics">
+      <div class="metric"><div class="ml">最新收盘</div><div class="mv">${number(data.last_close || data.quote.price)}</div></div>
+      <div class="metric"><div class="ml">当前趋势</div><div class="mv" style="font-size:14px">${trendTxt}</div></div>
+      <div class="metric"><div class="ml">支撑位·地板</div><div class="mv" style="color:var(--red)">${data.support ? data.support.toFixed(2) : '—'}</div></div>
+      <div class="metric"><div class="ml">压力位·天花板</div><div class="mv" style="color:#8a93a8">${data.resistance ? data.resistance.toFixed(2) : '—'}</div></div>
+      <div class="metric"><div class="ml">量比</div><div class="mv">${data.vol_ratio != null ? number(data.vol_ratio) : '—'}</div></div>
+    </div>
+    <p class="summary">📍 <b>支撑位</b>＝下方「地板」（前期低点，跌到附近常有资金接盘托一下，是值得关注的<b>观察位</b>）；<b>压力位</b>＝上方「天花板」（前期高点，涨到附近常遇套牢盘抛压、容易回落，是需要留意的<b>风险位</b>）。仅为技术位置提示，不构成买卖建议。</p></article>
     <article class="card"><h2>体检结论</h2>
     <p class="signal ${data.light === 'green' ? 'positive' : data.light === 'red' ? 'negative' : ''}">● ${data.band}</p>
     <dl><dt>MA20</dt><dd>${number(data.metrics?.ma20)}</dd><dt>MA60</dt><dd>${number(data.metrics?.ma60)}</dd><dt>MACD</dt><dd>${number(data.metrics?.macd)}</dd><dt>RSI</dt><dd>${number(data.metrics?.rsi)}</dd></dl>
     <button id="favorite" class="primary full">收藏到自选</button></article></div>
-    ${card('蜡烛形态', `<p class="report-note">已扫描 ${data.pat_scanned} 种形态，命中 ${data.pat_hit} 种</p><div class="pats" style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 0">${patternChips(data.patterns)}</div>`, 'report-card')}
+    <div class="scanhdr">🔬 体检共 <b>${(data.pat_scanned || 29) + 22}</b> 项 = <b>①${data.pat_scanned || 29} 种蜡烛形态</b>（下方「命中形态」列出命中的，没命中=没出现）＋ <b>②12 类技术维度</b>（10 类核心 + 墨菲摆动指标 7 项、经典图表形态两组汇总计分，下方逐项全列）。带分数=这次影响了评分，带「·」=查过、正常。</div>
+    ${card('', `<div class="seclbl">① 蜡烛形态 · 已扫 ${data.pat_scanned || 29} 种，命中 ${data.pat_hit || 0} 种 ${patScoreHtml}</div><div class="pats" style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 0 14px">${patternChips(data.patterns)}</div><div class="seclbl">② 技术维度 · 12 类（全部都扫了）</div>${data.scan_dims.map(d => {
+    const desc = SCAN_DIM_DESC[d.key];
+    const tt = desc ? `data-tooltip="${desc.meaning}" data-tooltip-signal="${desc.hint}"` : '';
+    const f = (data.factors || []).find(x => x.dim === d.key);
+    const pts = f ? f.pts : 0;
+    const cls = pts > 0 ? 'pos' : pts < 0 ? 'neg' : 'neu';
+    const badge = pts > 0 ? '+' + pts : pts < 0 ? '' + pts : '·';
+    return `<div class="dimrow2 ${cls} has-tip" ${tt}><span class="fpts ${pts ? '' : 'idle'}">${badge}</span><span class="dn">${escape(d.name)}</span><span class="dwhy">${escape(d.note)}</span></div>`;
+  }).join('')}`, 'report-card')}
     ${card('摆动指标组', renderMurphy(data.murphy), 'report-card')}
     ${card('经典图表形态', renderClassicPatterns(data.patterns_classic), 'report-card')}
     ${card('四方会诊', renderConsult(data.consult), 'report-card')}
-    ${card('全部校验', `<p class="report-note">每次体检会对趋势、均线、量价与动量指标执行同一套规则。</p>${data.scan_dims.map(d => {
-    const desc = SCAN_DIM_DESC[d.key];
-    const tt = desc ? `data-tooltip="${desc.meaning}" data-tooltip-signal="${desc.hint}"` : '';
-    return `<div class="check has-tip" ${tt}><i>${d.note.includes('跌破') || d.note.includes('偏弱') || d.note.includes('死叉') || d.note.includes('超买') ? '·' : '✓'}</i><b>${escape(d.name)}</b><span>${escape(d.note)}</span></div>`;
-  }).join('')}`, 'report-card')}
     <div id="favorites"></div>`);
   document.querySelector('#back').onclick = () => { location.hash = '#/check'; checkPage(); };
   const chartEl = document.querySelector('#chart');
