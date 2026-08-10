@@ -338,6 +338,34 @@ function checkPage() {
   renderFavorites();
 }
 
+
+// 体检历史迷你折线（P0-3）
+function renderCheckHistory(code) {
+  const slot = document.createElement('div');
+  slot.className = 'check-history';
+  slot.innerHTML = '<div class="seclbl">📈 体检历史（近 14 天健康分）</div><div class="history-loading" style="color:var(--muted);font-size:13px;padding:8px 0">加载中…</div>';
+  api(`/stocks/${code}/history`).then(h => {
+    const entries = h.entries || [];
+    if (entries.length < 2) { slot.innerHTML = '<div class="seclbl">📈 体检历史</div><div class="local-note" style="margin:0;padding:12px">多体检几次就会在这里显示健康分趋势（每天记一次）</div>'; return; }
+    const scores = entries.map(e => e.health);
+    const min = Math.min(...scores, 0), max = Math.max(...scores, 100);
+    const span = Math.max(max - min, 1);
+    const w = 460, h = 60, pad = 4;
+    const pts = entries.map((e, i) => `${(i / (entries.length - 1) * (w - pad * 2) + pad).toFixed(1)},${(h - pad - (e.health - min) / span * (h - pad * 2)).toFixed(1)}`).join(' ');
+    const dots = entries.map((e, i) => {
+      const x = (i / (entries.length - 1) * (w - pad * 2) + pad).toFixed(1);
+      const y = (h - pad - (e.health - min) / span * (h - pad * 2)).toFixed(1);
+      const color = e.light === 'green' ? '#16a34a' : e.light === 'yellow' ? '#d97706' : '#dc2626';
+      return `<circle cx="${x}" cy="${y}" r="3.5" fill="${color}"/><text x="${x}" y="${h - 1}" font-size="8" fill="#94a3b8" text-anchor="middle">${e.date.slice(5)}</text>`;
+    }).join('');
+    const last = entries[entries.length - 1];
+    slot.innerHTML = `<div class="seclbl">📈 体检历史（近 ${entries.length} 天健康分）</div>
+      <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:#f8fafc;border-radius:8px"><polyline points="${pts}" fill="none" stroke="#4f6cae" stroke-width="1.6" opacity=".8"/>${dots}</svg>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--muted)"><span>最新：<b style="color:${last.light === 'green' ? 'var(--good)' : last.light === 'yellow' ? 'var(--amber)' : 'var(--red)'}">${last.band} ${last.health}分</b>（${last.date}）</span><span>收盘 ${number(last.close)}</span></div>`;
+  }).catch(() => { slot.innerHTML = ''; });
+  return slot.outerHTML;
+}
+
 function renderReport(data) {
   // 均线排列状态
   const maAlign = d => {
@@ -398,6 +426,7 @@ function renderReport(data) {
     ${card('摆动指标组', renderMurphy(data.murphy), 'report-card')}
     ${card('经典图表形态', renderClassicPatterns(data.patterns_classic), 'report-card')}
     ${card('四方会诊', renderConsult(data.consult), 'report-card')}
+    ${card('体检历史', renderCheckHistory(data.code), 'report-card')}
     <div id="favorites"></div>`);
   document.querySelector('#back').onclick = () => { location.hash = '#/check'; checkPage(); };
   const chartEl = document.querySelector('#chart');

@@ -1,5 +1,5 @@
 const http = require('node:http');
-const { readFile, writeFile, mkdir } = require('node:fs/promises');
+const { readFile, writeFile, mkdir, readdir } = require('node:fs/promises');
 const { randomUUID } = require('node:crypto');
 const { join, extname } = require('node:path');
 
@@ -301,7 +301,52 @@ function reportFrom(quoteData, candles) {
     checks: scan_dims.map(d => [d.name, d.note, !d.note.includes('跌破') && !d.note.includes('偏弱') && !d.note.includes('死叉') && !d.note.includes('超买') && !d.note.includes('已跌破') && !d.note.includes('偏空')]),
   };
 }
-async function stockReport(code) { const normalized = String(code).replace(/\D/g, '').padStart(6, '0'); const [q, k] = await Promise.all([quote(normalized), klines(normalized)]); return reportFrom(q, k); }
+async function stockReport(code) {
+  const normalized = String(code).replace(/\D/g, '').padStart(6, '0');
+  const [q, k] = await Promise.all([quote(normalized), klines(normalized)]);
+  return reportFrom(q, k);
+}
+
+// --- 体检历史追踪（P0-3）---
+const CHECK_HISTORY_DIR = join(DATA_DIR, 'check-history');
+async function recordCheckHistory(result) {
+  if (!result || !result.code) return;
+  try {
+    const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+    const file = join(CHECK_HISTORY_DIR, `${today}.json`);
+    let history = {};
+    try { history = JSON.parse(await readFile(file, 'utf8')); } catch {}
+    history[result.code] = {
+      name: result.name, health: result.health, light: result.light, band: result.band,
+      close: result.last_close, updatedAt: new Date().toISOString(),
+    };
+    await mkdir(CHECK_HISTORY_DIR, { recursive: true });
+    await writeFile(file, JSON.stringify(history, null, 2));
+  } catch {}
+}
+
+async function stockReportWithHistory(code) {
+  const result = await stockReport(code);
+  await recordCheckHistory(result);
+  return result;
+}
+
+// 获取某只股票的历史体检记录（近 14 天）
+async function checkHistory(code) {
+  const normalized = String(code).replace(/\D/g, '').padStart(6, '0');
+  const entries = [];
+  try {
+    await mkdir(CHECK_HISTORY_DIR, { recursive: true });
+    const files = (await readdir(CHECK_HISTORY_DIR)).sort().slice(-14);
+    for (const f of files) {
+      try {
+        const day = JSON.parse(await readFile(join(CHECK_HISTORY_DIR, f), 'utf8'));
+        if (day[normalized]) entries.push({ date: f.replace('.json', ''), ...day[normalized] });
+      } catch {}
+    }
+  } catch {}
+  return entries;
+}
 function route(path) { return path === '/' ? '/index.html' : path; }
 
 // --- 限流并发 ---
@@ -343,9 +388,17 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && /^\/api\/stocks\/\d{6}\/report$/.test(url.pathname)) {
       const code = url.pathname.split('/')[3];
-      const result = await stockReport(code);
+      const result = await stockReportWithHistory(code);
       log('GET', url.pathname, 200, Date.now() - start);
       return json(res, 200, result);
+    }
+
+    // 单只股票的历史体检记录
+    if (req.method === 'GET' && /^\/api\/stocks\/\d{6}\/history$/.test(url.pathname)) {
+      const code = url.pathname.split('/')[3];
+      const entries = await checkHistory(code);
+      log('GET', url.pathname, 200, Date.now() - start);
+      return json(res, 200, { ok: true, code, entries });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/screen') {
@@ -421,12 +474,27 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (url.pathname === '/api/favorites') {
-      if (req.method === 'GET') { log('GET', url.pathname, 200, Date.now() - start); return json(res, 200, { favorites: db.favorites }); }
-      const { code, name } = await body(req);
+      if (req.method === 'GET') {
+        // 返回收藏（含分组信息）+ 分组列表
+        const groups = [...new Set(db.favorites.map(x => x.group || '默认').concat(['默认', '持仓', '观察', '候选']))];
+        log('GET', url.pathname, 200, Date.now() - start);
+        return json(res, 200, { favorites: db.favorites, groups });
+      }
+      const { code, name, group } = await body(req);
       if (!/^\d{6}$/.test(code || '')) return json(res, 400, { error: '股票代码不正确' });
-      if (!db.favorites.some(x => x.code === code)) { db.favorites.push({ id: randomUUID(), code, name, createdAt: new Date().toISOString() }); await saveDb(db); }
+      if (!db.favorites.some(x => x.code === code)) { db.favorites.push({ id: randomUUID(), code, name, group: String(group || '默认'), createdAt: new Date().toISOString() }); await saveDb(db); }
       log('POST', url.pathname, 201, Date.now() - start);
       return json(res, 201, { ok: true, favorites: db.favorites });
+    }
+    // 移动收藏到分组
+    if (req.method === 'PUT' && /^\/api\/favorites\/\d{6}$/.test(url.pathname)) {
+      const { group } = await body(req);
+      const fav = db.favorites.find(x => x.code === url.pathname.split('/').at(-1));
+      if (!fav) return json(res, 404, { error: '收藏不存在' });
+      fav.group = String(group || '默认');
+      await saveDb(db);
+      log('PUT', url.pathname, 200, Date.now() - start);
+      return json(res, 200, { ok: true });
     }
     if (req.method === 'DELETE' && /^\/api\/favorites\/\d{6}$/.test(url.pathname)) { db.favorites = db.favorites.filter(x => x.code !== url.pathname.split('/').at(-1)); await saveDb(db); log('DELETE', url.pathname, 200, Date.now() - start); return json(res, 200, { ok: true, favorites: db.favorites }); }
 

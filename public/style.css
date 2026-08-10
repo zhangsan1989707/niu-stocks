@@ -956,6 +956,17 @@ footer {
 
 
 
+
+/* ========== Favorite Groups (自选分组) ========== */
+.fav-groups { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 12px; }
+.fav-group-tab { border: 1px solid var(--line); background: var(--card); border-radius: 18px; padding: 5px 13px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .15s; }
+.fav-group-tab small { color: var(--faint); font-size: 11px; }
+.fav-group-tab:hover { border-color: var(--blue); color: var(--blue); }
+.fav-group-tab.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+.fav-group-tab.active small { color: rgba(255,255,255,.7); }
+.fav-group-move { border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font-size: 12px; color: var(--muted); background: var(--card); cursor: pointer; outline: 0; }
+.quote-refresh { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 8px 12px; font-size: 12px; font-weight: 700; cursor: pointer; color: var(--muted); }
+.quote-refresh:hover { color: var(--blue); border-color: var(--blue-line); }
 /* ========== Portfolio (工作台) ========== */
 .port-toolbar { display: flex; gap: 10px; margin: 12px 0 16px; flex-wrap: wrap; }
 .port-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 14px 0; }
