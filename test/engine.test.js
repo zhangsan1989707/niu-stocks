@@ -495,16 +495,18 @@ test('P0-1: calcPosition 无现价时返回成本价', () => {
 });
 
 test('P0-1: 持仓数据持久化到 portfolio.json', async () => {
-  const { mkdir, readFile, writeFile } = require('node:fs/promises');
+  const { mkdtemp, readFile, writeFile, rm } = require('node:fs/promises');
   const { join } = require('node:path');
-  const dir = join(require('node:path').dirname(require.resolve('../server')), 'data');
+  const os = require('node:os');
+  // 使用临时目录，避免污染生产数据文件
+  const dir = await mkdtemp(join(os.tmpdir(), 'portfolio-test-'));
   const file = join(dir, 'portfolio.json');
-  await mkdir(dir, { recursive: true });
   await writeFile(file, JSON.stringify({ positions: [{ id: 'test1', code: '600519', name: '贵州茅台', shares: 100, costPrice: 1450.5 }], trades: [] }));
   const loaded = JSON.parse(await readFile(file, 'utf8'));
   assert.equal(loaded.positions.length, 1);
   assert.equal(loaded.positions[0].code, '600519');
   assert.equal(loaded.positions[0].shares, 100);
+  await rm(dir, { recursive: true, force: true });
 });
 
 

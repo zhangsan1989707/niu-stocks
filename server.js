@@ -85,7 +85,7 @@ async function remoteSearch(q) {
     const data = JSON.parse(text);
     if (!data.QuotationCodeTable?.Data) return [];
     return data.QuotationCodeTable.Data
-      .filter(x => x.Code && x.Name && /^[036]\d{5}$/.test(x.Code))
+      .filter(x => x.Code && x.Name && /^[0368]\d{5}$/.test(x.Code))
       .map(x => ({ code: x.Code, name: x.Name }));
   } catch { return []; }
 }

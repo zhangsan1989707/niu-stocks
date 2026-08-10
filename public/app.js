@@ -521,7 +521,17 @@ async function testAll(favorites) {
 async function screenPage() {
   loading();
   try {
-    const data = await api('/screen');
+    const [data, sectorData] = await Promise.all([
+      api('/screen'),
+      api('/sectors').catch(() => ({ sectors: [] })),
+    ]);
+    const sectors = (sectorData && sectorData.sectors) || [];
+    const sectorHtml = sectors.length
+      ? `<div class="sector-heat" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 4px">${sectors.map(s => {
+          const col = s.avgPct >= 0 ? '#d8584d' : '#3a9e6e';
+          return `<div title="${escape(s.sector)}：${s.count} 只" style="flex:1;min-width:90px;text-align:center;border:1px solid var(--line);border-radius:10px;padding:8px 6px;background:#fff"><div style="font-size:12.5px;font-weight:700">${escape(s.sector)}</div><div style="font-family:ui-monospace,monospace;font-weight:800;color:${col};margin-top:2px">${s.avgPct >= 0 ? '+' : ''}${s.avgPct}%</div><div style="font-size:11px;color:var(--muted)">${s.count} 只</div></div>`;
+        }).join('')}</div>`
+      : '';
     layout('回春法选股', `${sectorHtml ? '<div class="how"><b>🔥 板块热度</b></div>' + sectorHtml + '<div style="height:12px"></div>' : ''}<div class="how"><b>📋 这份名单怎么用</b><p>每天按趋势、MACD、均线与量价规则扫描预置股票池（覆盖白酒/新能源/半导体/消费电子/金融/医药/汽车/稀土/通信/军工/家电等板块龙头，约 40 只）；候选仅供技术研究，不构成投资建议。</p></div>
     <div class="custom-scan"><input id="scan-custom-codes" placeholder="📝 自定义扫描：输入 6 位代码，逗号分隔，如 600519,002594,300750"><button id="scan-custom-btn" class="outline" style="white-space:nowrap">⚡ 扫描自定义列表</button><span id="custom-status" style="display:none;font-size:12px;color:var(--blue)"></span></div>
     ${card('', `<div class="filters"><input id="screen-filter" placeholder="🔍 输入代码/名称搜索"><button class="active">体检分</button></div><p class="report-note">🩺 候选按体检分排序，数据更新时间：${date(data.updatedAt)}</p><div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>今日</th><th>体检分</th><th>量比</th><th>结论</th><th>灯</th></tr></thead><tbody id="screen-rows"></tbody></table></div>`)}`);
@@ -795,10 +805,163 @@ async function portfolioPage() {
   } catch (e) { checkPage(); notice(e.message); }
 }
 
+// --- 提醒系统（P1）---
+async function alertsPage() {
+  loading();
+  let rules = [], pending = [], unreadCount = 0;
+  try {
+    const data = await api('/alerts');
+    rules = data.rules || []; pending = data.pending || []; unreadCount = data.unreadCount || 0;
+  } catch { /* 首次访问时文件未创建，正常 */ }
+  layout('价格提醒', `
+    <p class="intro">为关注的股票设置价格/涨跌幅提醒，触发后会在「待读提醒」中显示（5 分钟内同条规则不重复触发）。数据保存在本机。</p>
+    <div class="port-toolbar">
+      <button class="primary" id="addAlertBtn">＋ 新建提醒</button>
+      <button class="outline" id="refreshAlerts">↻ 刷新</button>
+      <button class="outline" id="readAllAlerts">✓ 全部标为已读${unreadCount ? `（${unreadCount}）` : ''}</button>
+    </div>
+    <div id="pending-slot"></div>
+    <div id="rules-slot"></div>
+    <div id="alertModal" class="modal" style="display:none">
+      <div class="modal-box">
+        <h3>新建提醒</h3>
+        <label>股票代码 <input id="alert-code" placeholder="6位代码，如 600519" maxlength="6"></label>
+        <label>股票名称（可选） <input id="alert-name" placeholder="如 贵州茅台"></label>
+        <label>提醒类型
+          <select id="alert-type">
+            <option value="price">价格</option>
+            <option value="pct">涨跌幅(%)</option>
+          </select>
+        </label>
+        <label>触发条件
+          <select id="alert-condition">
+            <option value=">=">≥ 上穿</option>
+            <option value="<=">≤ 下穿</option>
+          </select>
+        </label>
+        <label>阈值 <input id="alert-value" type="number" step="0.01" placeholder="如 1500 或 -3"></label>
+        <div class="modal-actions"><button class="outline" id="alert-cancel">取消</button><button class="primary" id="alert-save">保存</button></div>
+      </div>
+    </div>`);
+
+  const renderPending = () => {
+    const slot = document.querySelector('#pending-slot');
+    if (!slot) return;
+    const unread = pending.filter(p => !p.read);
+    const recent = pending.slice(0, 20);
+    slot.innerHTML = recent.length
+      ? `<article class="card"><h2>待读提醒${unread.length ? ` <span class="lightdot red">${unread.length}</span>` : ''}</h2><div class="alert-list">${recent.map(p => `<div class="alert-item ${p.read ? 'read' : 'unread'}"><span class="alert-msg">${escape(p.message)}</span><time>${date(p.time)}</time></div>`).join('')}</div></article>`
+      : '<article class="card"><h2>待读提醒</h2><p class="empty">暂无触发的提醒</p></article>';
+  };
+  const renderRules = () => {
+    const slot = document.querySelector('#rules-slot');
+    if (!slot) return;
+    slot.innerHTML = rules.length
+      ? `<article class="card"><h2>提醒规则</h2><div class="table-wrap"><table><thead><tr><th>股票</th><th>类型</th><th>条件</th><th>阈值</th><th>状态</th><th>操作</th></tr></thead><tbody>${rules.map(r => `<tr data-id="${r.id}"><td><b>${escape(r.name || r.code)}</b><br><small>${r.code}</small></td><td>${r.type === 'price' ? '价格' : '涨跌幅'}</td><td>${r.condition}</td><td>${r.type === 'price' ? number(r.value) : r.value + '%'}</td><td>${r.enabled ? '<span class="lightdot green">启用</span>' : '<span class="lightdot idle">停用</span>'}</td><td><button class="mini danger" data-del="${r.id}">删除</button></td></tr>`).join('')}</tbody></table></div></article>`
+      : '<article class="card"><h2>提醒规则</h2><p class="empty">还没有提醒规则，点上方「新建提醒」创建一个。</p></article>';
+    slot.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => {
+      try { await api(`/alerts/${b.dataset.del}`, { method: 'DELETE' }); notice('已删除', true); alertsPage(); }
+      catch (e) { notice(e.message); }
+    });
+  };
+  renderPending(); renderRules();
+
+  document.querySelector('#addAlertBtn').onclick = () => { document.querySelector('#alertModal').style.display = 'flex'; };
+  document.querySelector('#alert-cancel').onclick = () => { document.querySelector('#alertModal').style.display = 'none'; };
+  document.querySelector('#alert-save').onclick = async () => {
+    const code = document.querySelector('#alert-code').value.trim();
+    if (!/^\d{6}$/.test(code)) return notice('请输入6位股票代码');
+    const value = Number(document.querySelector('#alert-value').value);
+    if (!Number.isFinite(value)) return notice('请输入有效的阈值');
+    try {
+      await api('/alerts', { method: 'POST', body: JSON.stringify({
+        code,
+        name: document.querySelector('#alert-name').value.trim(),
+        type: document.querySelector('#alert-type').value,
+        condition: document.querySelector('#alert-condition').value,
+        value,
+      }) });
+      document.querySelector('#alertModal').style.display = 'none';
+      notice('提醒已创建', true); alertsPage();
+    } catch (e) { notice(e.message); }
+  };
+  document.querySelector('#refreshAlerts').onclick = async () => {
+    try { const data = await api('/alerts/pending'); pending = data.pending || []; renderPending(); notice('已刷新', true); }
+    catch (e) { notice(e.message); }
+  };
+  document.querySelector('#readAllAlerts').onclick = async () => {
+    try { await api('/alerts/readall', { method: 'PUT' }); pending = pending.map(p => ({ ...p, read: true })); renderPending(); notice('已全部标为已读', true); }
+    catch (e) { notice(e.message); }
+  };
+}
+
+// --- 决策笔记（P2）---
+async function notesPage() {
+  loading();
+  let notes = [];
+  try { const data = await api('/notes'); notes = data.notes || []; } catch {}
+  layout('决策笔记', `
+    <p class="intro">记录每次买卖决策的理由、结果和教训，复盘才能进步。数据保存在本机。</p>
+    <div class="port-toolbar"><button class="primary" id="addNoteBtn">＋ 新建笔记</button></div>
+    <div id="notes-list"></div>
+    <div id="noteModal" class="modal" style="display:none">
+      <div class="modal-box">
+        <h3>新建笔记</h3>
+        <label>股票代码 <input id="note-code" placeholder="6位代码，如 600519" maxlength="6"></label>
+        <label>股票名称（可选） <input id="note-name" placeholder="如 贵州茅台"></label>
+        <label>方向
+          <select id="note-direction">
+            <option value="buy">买入</option>
+            <option value="sell">卖出</option>
+            <option value="watch">观望</option>
+          </select>
+        </label>
+        <label>理由 <textarea id="note-reason" rows="2" placeholder="为什么这么操作？"></textarea></label>
+        <label>结果 <input id="note-result" placeholder="对/错（事后填写）"></label>
+        <label>教训 <textarea id="note-lesson" rows="2" placeholder="下次该怎么改进？"></textarea></label>
+        <div class="modal-actions"><button class="outline" id="note-cancel">取消</button><button class="primary" id="note-save">保存</button></div>
+      </div>
+    </div>`);
+  const dirMeta = { buy: { txt: '买入', cls: 'up' }, sell: { txt: '卖出', cls: 'down' }, watch: { txt: '观望', cls: '' } };
+  const render = () => {
+    const slot = document.querySelector('#notes-list');
+    slot.innerHTML = notes.length
+      ? notes.map(n => {
+          const m = dirMeta[n.direction] || { txt: n.direction, cls: '' };
+          return `<article class="card note-item"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="tdir ${n.direction}" style="padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;background:${n.direction === 'buy' ? 'var(--red-soft)' : n.direction === 'sell' ? 'var(--good-soft)' : 'var(--line-soft)'};color:${n.direction === 'buy' ? 'var(--red)' : n.direction === 'sell' ? 'var(--good)' : 'var(--muted)'}">${m.txt}</span><b>${escape(n.name || n.code)}</b><small>${n.code}</small><time style="margin-left:auto;color:var(--muted);font-size:12px">${date(n.createdAt)}</time><button class="mini danger" data-del="${n.id}">删除</button></div>${n.reason ? `<p><b>理由：</b>${escape(n.reason)}</p>` : ''}${n.result ? `<p><b>结果：</b>${escape(n.result)}</p>` : ''}${n.lesson ? `<p><b>教训：</b>${escape(n.lesson)}</p>` : ''}</article>`;
+        }).join('')
+      : '<p class="empty">还没有笔记，点上方「新建笔记」记录第一笔决策。</p>';
+    slot.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => {
+      try { await api(`/notes/${b.dataset.del}`, { method: 'DELETE' }); notice('已删除', true); notesPage(); }
+      catch (e) { notice(e.message); }
+    });
+  };
+  render();
+  document.querySelector('#addNoteBtn').onclick = () => { document.querySelector('#noteModal').style.display = 'flex'; };
+  document.querySelector('#note-cancel').onclick = () => { document.querySelector('#noteModal').style.display = 'none'; };
+  document.querySelector('#note-save').onclick = async () => {
+    const code = document.querySelector('#note-code').value.trim();
+    const direction = document.querySelector('#note-direction').value;
+    if (!/^\d{6}$/.test(code)) return notice('请输入6位股票代码');
+    try {
+      await api('/notes', { method: 'POST', body: JSON.stringify({
+        code,
+        name: document.querySelector('#note-name').value.trim(),
+        direction,
+        reason: document.querySelector('#note-reason').value.trim(),
+        result: document.querySelector('#note-result').value.trim(),
+        lesson: document.querySelector('#note-lesson').value.trim(),
+      }) });
+      document.querySelector('#noteModal').style.display = 'none';
+      notice('笔记已保存', true); notesPage();
+    } catch (e) { notice(e.message); }
+  };
+}
+
 function router() {
   const path = location.hash.slice(2) || 'check';
   if (path.startsWith('check/')) { const code = path.split('/')[1]; checkPage(); setTimeout(() => { document.querySelector('#stock-input').value = code; api(`/stocks/${code}/report`).then(r => { const scanSlot = document.querySelector('#scan-slot'); if (scanSlot) playScanAnim(scanSlot, Promise.resolve({j:r}), {title:'个股体检中'}).then(({j}) => j && renderReport(j)); }).catch(e => notice(e.message)); }, 100); return; }
-  ({ check: checkPage, screen: screenPage, rules: rulesPage, feedback: feedbackPage, portfolio: portfolioPage }[path] || checkPage)();
+  ({ check: checkPage, screen: screenPage, rules: rulesPage, feedback: feedbackPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
 }
 router(); window.addEventListener('hashchange', router);
 
