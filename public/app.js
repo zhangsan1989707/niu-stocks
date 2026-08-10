@@ -3,7 +3,7 @@ const api = (path, options = {}) => fetch(`/api${path}`, { headers: { 'content-t
 const escape = value => String(value ?? '').replace(/[&<>"']/g, x => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' })[x]);
 const number = value => Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
 const date = value => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—';
-function notice(message, good = false) { const node = document.createElement('div'); node.className = `toast ${good ? 'good' : ''}`; node.textContent = message; document.body.append(node); setTimeout(() => node.remove(), 2600); }
+function notice(message, good = false) { const node = document.createElement('div'); node.className = `toast ${good ? 'good' : ''}`; node.textContent = message; document.body.append(node); setTimeout(() => { node.classList.add('fadeout'); setTimeout(() => node.remove(), 280); }, 2300); }
 function layout(title, content, intro = '') { document.title = `${title} · 牛股体检站`; app.innerHTML = `<section class="page"><h1>${title}</h1>${intro ? `<p class="intro">${intro}</p>` : ''}${content}</section>`; }
 function card(title, body, cls='') { return `<article class="card ${cls}">${title ? `<h2>${title}</h2>` : ''}${body}</article>`; }
 function loading() { app.innerHTML = '<section class="page"><div class="loading">正在读取市场数据…</div></section>'; }
@@ -21,17 +21,14 @@ function patternChips(patterns) {
 // --- 四方会诊渲染 ---
 function renderConsult(c) {
   if (!c) return '';
-  const colors = { green: '#e9f6ef', red: '#fdeeea', yellow: '#fdf6e3', neutral: '#f7f9fd' };
-  const borders = { green: '#cce8d8', red: '#f3cfc9', yellow: '#f0e2b4', neutral: '#e6ebf4' };
   const row = (ic, nm, L) => {
     const cls = L.includes('偏多') ? 'green' : L.includes('偏空') ? 'red' : 'neutral';
-    const col = { green: '#247a52', red: '#bb4339', neutral: '#76819a' }[cls];
-    return `<div style="display:flex;align-items:center;gap:8px;padding:2px 0;font-size:12.5px"><span style="width:92px;color:#76819a">${ic} ${nm}</span><b style="color:${col}">${escape(L)}</b></div>`;
+    return `<div class="consult-row ${cls}"><span class="consult-ic">${ic} ${nm}</span><b>${escape(L)}</b></div>`;
   };
-  return `<div style="margin:10px 0 6px;padding:11px 13px;background:${colors[c.cls]};border:1px solid ${borders[c.cls]};border-radius:11px;font-size:13px;line-height:1.6">
+  return `<div class="consult-box ${c.cls}">
     <b>🩺 四方会诊</b>（蜡烛短线 / 趋势结构 / 摆动动量 / 图表中线，四路独立判向）
     ${row('🕯️', '蜡烛形态', c.L1)}${row('📉', '趋势·破位', c.L2)}${row('📊', '摆动指标', c.L3)}${row('📐', '图表形态', c.L4)}
-    <div style="margin-top:6px;padding-top:6px;border-top:1px dashed ${borders[c.cls]}"><b>综合：</b>${c.bulls} 方偏多 / ${c.bears} 方偏空 → ${c.verdict}</div>
+    <div class="consult-sum"><b>综合：</b>${c.bulls} 方偏多 / ${c.bears} 方偏空 → ${c.verdict}</div>
   </div>`;
 }
 
@@ -370,7 +367,7 @@ function renderReport(data) {
     <div class="calcnote">${calcNote}</div>
     <div class="checkdone">✓ 已逐项核验 ${data.pat_scanned || 29} 种蜡烛形态 ＋ 12 类技术维度</div>
     <div class="report-grid"><article class="card"><h2>趋势与价格</h2><div id="chart" class="chart"></div>
-    <div class="legend" style="display:flex;gap:13px;flex-wrap:wrap;font-size:11px;color:#76819a;padding:2px 6px 8px"><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#d8584d;vertical-align:middle;margin-right:3px"></span>红=涨</i><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#3a9e6e;vertical-align:middle;margin-right:3px"></span>绿=跌</i><i><span style="display:inline-block;width:9px;height:2px;background:#4f6cae;vertical-align:middle;margin-right:3px"></span>蓝线=MA60</i><i><span style="display:inline-block;width:9px;height:2px;background:#c9922e;vertical-align:middle;margin-right:3px"></span>金线=均量5</i><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#d8584d;vertical-align:middle;margin-right:3px"></span>红虚线=支撑</i><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#9aa6bd;vertical-align:middle;margin-right:3px"></span>灰虚线=压力</i></div>
+    <div class="legend"><i><span style="background:#d8584d"></span>红=涨</i><i><span style="background:#3a9e6e"></span>绿=跌</i><i><span class="line" style="background:#4f6cae"></span>蓝线=MA60</i><i><span class="line" style="background:#c9922e"></span>金线=均量5</i><i><span style="background:#d8584d"></span>红虚线=支撑</i><i><span style="background:#9aa6bd"></span>灰虚线=压力</i></div>
     <div class="metrics">
       <div class="metric"><div class="ml">最新收盘</div><div class="mv">${number(data.last_close || data.quote.price)}</div><div class="ms">${data.quote.changePct >= 0 ? '+' : ''}${number(data.quote.changePct)}%</div></div>
       <div class="metric"><div class="ml">当前趋势</div><div class="mv" style="font-size:14px">${trendTxt}</div><div class="ms">${data.metrics?.ma5 >= data.metrics?.ma20 ? '短期偏多' : '短期偏空'}</div></div>

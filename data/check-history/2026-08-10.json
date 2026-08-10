@@ -1,0 +1,66 @@
+{
+  "600392": {
+    "name": "盛和资源",
+    "health": 86,
+    "light": "green",
+    "band": "健康",
+    "close": 25.39,
+    "updatedAt": "2026-08-10T08:59:21.076Z"
+  },
+  "601899": {
+    "name": "紫金矿业",
+    "health": 78,
+    "light": "green",
+    "band": "偏好",
+    "close": 35.45,
+    "updatedAt": "2026-08-10T09:28:39.648Z"
+  },
+  "603123": {
+    "name": "翠微股份",
+    "health": 81,
+    "light": "green",
+    "band": "健康",
+    "close": 9.85,
+    "updatedAt": "2026-08-10T06:56:03.698Z"
+  },
+  "603211": {
+    "name": "晋拓股份",
+    "health": 34,
+    "light": "red",
+    "band": "偏弱",
+    "close": 26.69,
+    "updatedAt": "2026-08-10T09:00:53.658Z"
+  },
+  "603678": {
+    "name": "火炬电子",
+    "health": 56,
+    "light": "yellow",
+    "band": "中性",
+    "close": 51.54,
+    "updatedAt": "2026-08-10T08:25:56.136Z"
+  },
+  "000636": {
+    "name": "风华高科",
+    "health": 79,
+    "light": "green",
+    "band": "偏好",
+    "close": 61.7,
+    "updatedAt": "2026-08-10T08:32:33.121Z"
+  },
+  "002698": {
+    "name": "博实股份",
+    "health": 85,
+    "light": "green",
+    "band": "健康",
+    "close": 13.56,
+    "updatedAt": "2026-08-10T08:34:29.764Z"
+  },
+  "002371": {
+    "name": "北方华创",
+    "health": 91,
+    "light": "green",
+    "band": "健康",
+    "close": 760,
+    "updatedAt": "2026-08-10T12:48:16.777Z"
+  }
+}
