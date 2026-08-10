@@ -595,8 +595,57 @@ function rulesPage() {
     ${card('全部校验标准', `<p>每查一只股票，引擎会一次性跑完 51 项规则：29 种蜡烛形态 + 10 类核心维度 + 墨菲摆动指标 7 项 + 经典图表形态 5 类。鼠标悬停在报告里的每项上可以看到精确含义。</p>
     <p style="color:var(--muted);font-size:12.5px;margin-top:10px">本工具只看技术图形，判断"是否破位/能不能买"，不预测涨跌幅、不给目标价，不构成投资建议。<br>方法论来源：回春战法 + 史蒂夫·尼森《日本蜡烛图技术》+ 约翰·墨菲《金融市场技术分析》(均为丁圣元译)。</p>`)}
 
-    <div id="config-panel"></div>`);
+    <div id="config-panel"></div>
+    <div id="stocks-panel"></div>`);
   loadConfig();
+  loadStocksPanel();
+}
+
+// --- 股票池管理面板 ---
+async function loadStocksPanel() {
+  const panel = document.querySelector('#stocks-panel');
+  if (!panel) return;
+  try {
+    const data = await api('/stocks');
+    const stocks = data.stocks || [];
+    panel.innerHTML = `
+      <article class="card">
+        <h2>股票池管理</h2>
+        <p class="muted">选股扫描范围。共 ${stocks.length} 只。添加/删除后立即生效。</p>
+        <div class="bt-form" style="margin-bottom:14px">
+          <div class="bt-field">
+            <label class="cfg-label" for="stk-code">代码</label>
+            <input class="cfg-input" id="stk-code" type="text" placeholder="6位代码" maxlength="6">
+          </div>
+          <div class="bt-field">
+            <label class="cfg-label" for="stk-name">名称</label>
+            <input class="cfg-input" id="stk-name" type="text" placeholder="股票名称">
+          </div>
+          <button class="bt-run" id="stk-add">添加</button>
+        </div>
+        <div class="table-wrap">
+          <table class="bt-table">
+            <thead><tr><th>代码</th><th>名称</th><th>板块</th><th>操作</th></tr></thead>
+            <tbody>${stocks.map(s => `<tr><td class="tnum">${s.code}</td><td>${escape(s.name)}</td><td>${escape(s.sector || '其他')}</td><td><button class="mini danger" data-del="${s.code}">移除</button></td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </article>`;
+    panel.querySelector('#stk-add').onclick = async () => {
+      const code = panel.querySelector('#stk-code').value.trim();
+      const name = panel.querySelector('#stk-name').value.trim();
+      if (!/^\d{6}$/.test(code)) return notice('请输入 6 位股票代码');
+      try {
+        await api('/stocks', { method: 'POST', body: JSON.stringify({ code, name }) });
+        notice('已添加', true); loadStocksPanel();
+      } catch (e) { notice(e.message); }
+    };
+    panel.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => {
+      try {
+        await api(`/stocks?code=${b.dataset.del}`, { method: 'DELETE' });
+        notice('已移除', true); loadStocksPanel();
+      } catch (e) { notice(e.message); }
+    });
+  } catch { panel.innerHTML = ''; }
 }
 async function loadConfig() {
   const panel = document.querySelector('#config-panel');

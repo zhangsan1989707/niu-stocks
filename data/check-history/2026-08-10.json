@@ -20,8 +20,8 @@
     "health": 81,
     "light": "green",
     "band": "健康",
-    "close": 9.85,
-    "updatedAt": "2026-08-10T06:56:03.698Z"
+    "close": 9.86,
+    "updatedAt": "2026-08-10T13:27:47.113Z"
   },
   "603211": {
     "name": "晋拓股份",
@@ -62,5 +62,21 @@
     "band": "健康",
     "close": 760,
     "updatedAt": "2026-08-10T12:48:16.777Z"
+  },
+  "000021": {
+    "name": "深科技",
+    "health": 42,
+    "light": "red",
+    "band": "偏弱",
+    "close": 40.2,
+    "updatedAt": "2026-08-10T13:27:47.099Z"
+  },
+  "002463": {
+    "name": "沪电股份",
+    "health": 60,
+    "light": "yellow",
+    "band": "中性",
+    "close": 122.7,
+    "updatedAt": "2026-08-10T13:27:47.107Z"
   }
 }
