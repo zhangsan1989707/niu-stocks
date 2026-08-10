@@ -624,11 +624,6 @@ textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(79,108,17
   font-size: 13px;
 }
 
-.feedback { padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
-.feedback time { color: var(--faint); font-size: 12px; margin-left: 8px; }
-.feedback p { white-space: pre-wrap; font-size: 14px; }
-.feedback b { font-weight: 600; font-size: 14px; }
-
 /* ========== Toast ========== */
 .toast {
   position: fixed;

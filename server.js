@@ -64,7 +64,7 @@ async function loadDb() {
   if (_dbCache && Date.now() - _dbCacheTime < 1000) return _dbCache;
   await mkdir(DATA_DIR, { recursive: true });
   try { _dbCache = JSON.parse(await readFile(DB_FILE, 'utf8')); }
-  catch { _dbCache = { feedback: [], favorites: [] }; }
+  catch { _dbCache = { favorites: [] }; }
   _dbCacheTime = Date.now();
   return _dbCache;
 }
@@ -497,16 +497,6 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
     if (req.method === 'DELETE' && /^\/api\/favorites\/\d{6}$/.test(url.pathname)) { db.favorites = db.favorites.filter(x => x.code !== url.pathname.split('/').at(-1)); await saveDb(db); log('DELETE', url.pathname, 200, Date.now() - start); return json(res, 200, { ok: true, favorites: db.favorites }); }
-
-    if (url.pathname === '/api/feedback') {
-      if (req.method === 'GET') { log('GET', url.pathname, 200, Date.now() - start); return json(res, 200, { feedback: db.feedback.slice(-30).reverse() }); }
-      const { message } = await body(req);
-      if (!String(message || '').trim() || message.length > 500) return json(res, 400, { error: '反馈内容需为 1–500 字' });
-      db.feedback.push({ id: randomUUID(), message: message.trim(), author: '本机用户', createdAt: new Date().toISOString() });
-      await saveDb(db);
-      log('POST', url.pathname, 201, Date.now() - start);
-      return json(res, 201, { ok: true });
-    }
 
     // ===== 持仓管理 =====
     if (url.pathname === '/api/portfolio') {

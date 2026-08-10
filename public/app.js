@@ -599,13 +599,6 @@ function rulesPage() {
     <p style="color:var(--muted);font-size:12.5px;margin-top:10px">本工具只看技术图形，判断"是否破位/能不能买"，不预测涨跌幅、不给目标价，不构成投资建议。<br>方法论来源：回春战法 + 史蒂夫·尼森《日本蜡烛图技术》+ 约翰·墨菲《金融市场技术分析》(均为丁圣元译)。</p>`)}`);
 }
 
-async function feedbackPage() {
-  layout('意见反馈 / 留言板', `<p class="intro">用着哪里不顺、想要什么功能、发现 bug，直接在这儿说。反馈会保存在当前电脑本地。</p><textarea id="feedback-message" maxlength="500" placeholder="说说你的想法、建议或遇到的问题…（最多 500 字）"></textarea><div class="form-actions"><span>提交后仅保存在本机</span><button id="send-feedback" class="primary">提交反馈</button></div><div id="feedback-list"></div>`);
-  const render = async () => { const data = await api('/feedback'); document.querySelector('#feedback-list').innerHTML = data.feedback.map(x => `<article class="feedback"><b>${escape(x.author)}</b><time>${date(x.createdAt)}</time><p>${escape(x.message)}</p></article>`).join('') || '<p class="empty">还没有留言，来说第一句吧。</p>'; };
-  document.querySelector('#send-feedback').onclick = async () => { try { await api('/feedback', { method:'POST', body:JSON.stringify({message:document.querySelector('#feedback-message').value}) }); document.querySelector('#feedback-message').value = ''; notice('感谢反馈，已保存', true); render(); } catch (e) { notice(e.message); } };
-  render();
-}
-
 
 // --- 通用 Tooltip ---
 let _tipTimer = null;
@@ -961,7 +954,7 @@ async function notesPage() {
 function router() {
   const path = location.hash.slice(2) || 'check';
   if (path.startsWith('check/')) { const code = path.split('/')[1]; checkPage(); setTimeout(() => { document.querySelector('#stock-input').value = code; api(`/stocks/${code}/report`).then(r => { const scanSlot = document.querySelector('#scan-slot'); if (scanSlot) playScanAnim(scanSlot, Promise.resolve({j:r}), {title:'个股体检中'}).then(({j}) => j && renderReport(j)); }).catch(e => notice(e.message)); }, 100); return; }
-  ({ check: checkPage, screen: screenPage, rules: rulesPage, feedback: feedbackPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
+  ({ check: checkPage, screen: screenPage, rules: rulesPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
 }
 router(); window.addEventListener('hashchange', router);
 
