@@ -339,6 +339,16 @@ function checkPage() {
 }
 
 function renderReport(data) {
+  // 均线排列状态
+  const maAlign = d => {
+    const { ma5, ma20, ma60 } = d.metrics || {};
+    if (!ma5 || !ma20 || !ma60) return '—';
+    if (ma5 > ma20 && ma20 > ma60) return '多头排列';
+    if (ma5 < ma20 && ma20 < ma60) return '空头排列';
+    if (ma5 > ma60 && ma20 < ma60) return '纠缠偏多';
+    if (ma5 < ma60 && ma20 > ma60) return '纠缠偏空';
+    return '均线纠缠';
+  };
   // 结论卡三色映射
   const lightMeta = { red: { em: '🔴', w: '技术风险高' }, yellow: { em: '🟡', w: '信号不明' }, green: { em: '🟢', w: '技术较稳' } }[data.light] || { em: '⚪', w: '—' };
   const trendTxt = { up: '上升趋势', down: '下降趋势', range: '横盘震荡' }[data.trend] || '—';
@@ -362,17 +372,19 @@ function renderReport(data) {
     <div class="report-grid"><article class="card"><h2>趋势与价格</h2><div id="chart" class="chart"></div>
     <div class="legend" style="display:flex;gap:13px;flex-wrap:wrap;font-size:11px;color:#76819a;padding:2px 6px 8px"><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#d8584d;vertical-align:middle;margin-right:3px"></span>红=涨</i><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#3a9e6e;vertical-align:middle;margin-right:3px"></span>绿=跌</i><i><span style="display:inline-block;width:9px;height:2px;background:#4f6cae;vertical-align:middle;margin-right:3px"></span>蓝线=MA60</i><i><span style="display:inline-block;width:9px;height:2px;background:#c9922e;vertical-align:middle;margin-right:3px"></span>金线=均量5</i><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#d8584d;vertical-align:middle;margin-right:3px"></span>红虚线=支撑</i><i><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#9aa6bd;vertical-align:middle;margin-right:3px"></span>灰虚线=压力</i></div>
     <div class="metrics">
-      <div class="metric"><div class="ml">最新收盘</div><div class="mv">${number(data.last_close || data.quote.price)}</div></div>
-      <div class="metric"><div class="ml">当前趋势</div><div class="mv" style="font-size:14px">${trendTxt}</div></div>
-      <div class="metric"><div class="ml">支撑位·地板</div><div class="mv" style="color:var(--red)">${data.support ? data.support.toFixed(2) : '—'}</div></div>
-      <div class="metric"><div class="ml">压力位·天花板</div><div class="mv" style="color:#8a93a8">${data.resistance ? data.resistance.toFixed(2) : '—'}</div></div>
-      <div class="metric"><div class="ml">量比</div><div class="mv">${data.vol_ratio != null ? number(data.vol_ratio) : '—'}</div></div>
+      <div class="metric"><div class="ml">最新收盘</div><div class="mv">${number(data.last_close || data.quote.price)}</div><div class="ms">${data.quote.changePct >= 0 ? '+' : ''}${number(data.quote.changePct)}%</div></div>
+      <div class="metric"><div class="ml">当前趋势</div><div class="mv" style="font-size:14px">${trendTxt}</div><div class="ms">${data.metrics?.ma5 >= data.metrics?.ma20 ? '短期偏多' : '短期偏空'}</div></div>
+      <div class="metric"><div class="ml">均线排列</div><div class="mv" style="font-size:13px">${maAlign(data)}</div><div class="ms">MA5/20/60</div></div>
+      <div class="metric"><div class="ml">支撑位·地板</div><div class="mv" style="color:var(--red)">${data.support ? data.support.toFixed(2) : '—'}</div><div class="ms">距现价 ${data.support && data.last_close ? (Math.abs(1 - data.support / data.last_close) * 100).toFixed(1) + '%' : '—'}</div></div>
+      <div class="metric"><div class="ml">压力位·天花板</div><div class="mv" style="color:#8a93a8">${data.resistance ? data.resistance.toFixed(2) : '—'}</div><div class="ms">距现价 ${data.resistance && data.last_close ? (Math.abs(1 - data.resistance / data.last_close) * 100).toFixed(1) + '%' : '—'}</div></div>
+      <div class="metric"><div class="ml">量比</div><div class="mv">${data.vol_ratio != null ? number(data.vol_ratio) : '—'}</div><div class="ms">${(data.vol_ratio || 0) >= 1.5 ? '放量' : '常态'}</div></div>
     </div>
     <p class="summary">📍 <b>支撑位</b>＝下方「地板」（前期低点，跌到附近常有资金接盘托一下，是值得关注的<b>观察位</b>）；<b>压力位</b>＝上方「天花板」（前期高点，涨到附近常遇套牢盘抛压、容易回落，是需要留意的<b>风险位</b>）。仅为技术位置提示，不构成买卖建议。</p></article>
     <article class="card"><h2>体检结论</h2>
+    <div class="conclusion-row">
     <p class="signal ${data.light === 'green' ? 'positive' : data.light === 'red' ? 'negative' : ''}">● ${data.band}</p>
-    <dl><dt>MA20</dt><dd>${number(data.metrics?.ma20)}</dd><dt>MA60</dt><dd>${number(data.metrics?.ma60)}</dd><dt>MACD</dt><dd>${number(data.metrics?.macd)}</dd><dt>RSI</dt><dd>${number(data.metrics?.rsi)}</dd></dl>
-    <button id="favorite" class="primary full">收藏到自选</button></article></div>
+    <dl class="conclusion-metrics"><dt>MA20</dt><dd>${number(data.metrics?.ma20)}</dd><dt>MA60</dt><dd>${number(data.metrics?.ma60)}</dd><dt>MACD</dt><dd>${number(data.metrics?.macd)}</dd><dt>RSI</dt><dd>${number(data.metrics?.rsi)}</dd></dl>
+    <button id="favorite" class="primary">收藏到自选</button></div></article></div>
     <div class="scanhdr">🔬 体检共 <b>${(data.pat_scanned || 29) + 10 + 7 + 5}</b> 项 = <b>①${data.pat_scanned || 29} 种蜡烛形态</b>（下方「命中形态」列出命中的，没命中=没出现）＋ <b>②技术维度展开 ${10 + 7 + 5} 项</b>（10 类核心 + 墨菲摆动指标 7 项 + 经典图表形态 5 类，下方逐项全列）。带分数=这次影响了评分，带「·」=查过、正常。</div>
     ${card('', `<div class="seclbl">① 蜡烛形态 · 已扫 ${data.pat_scanned || 29} 种，命中 ${data.pat_hit || 0} 种 ${patScoreHtml}</div><div class="pats" style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 0 14px">${patternChips(data.patterns)}</div><div class="seclbl">② 技术维度 · 12 类（全部都扫了）</div>${data.scan_dims.map(d => {
     const desc = SCAN_DIM_DESC[d.key];
