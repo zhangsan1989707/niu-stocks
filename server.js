@@ -139,6 +139,24 @@ async function klines(code) {
   return result;
 }
 
+// --- 持仓管理（P0）---
+const PORTFOLIO_FILE = join(DATA_DIR, 'portfolio.json');
+
+async function loadPortfolio() {
+  await mkdir(DATA_DIR, { recursive: true });
+  try { return JSON.parse(await readFile(PORTFOLIO_FILE, 'utf8')); }
+  catch { return { positions: [], trades: [] }; }
+}
+async function savePortfolio(pf) { await writeFile(PORTFOLIO_FILE, JSON.stringify(pf, null, 2)); }
+
+function calcPosition(pos, price) {
+  const cost = pos.shares * pos.costPrice;
+  const marketValue = price != null ? pos.shares * price : cost;
+  const pnl = price != null ? marketValue - cost : 0;
+  const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
+  return { cost, marketValue, pnl, pnlPct };
+}
+
 // --- 报告引擎 ---
 function reportFrom(quoteData, candles) {
   const closes = candles.map(x => x.close), volumes = candles.map(x => x.volume), last = candles.at(-1);
@@ -422,6 +440,121 @@ const server = http.createServer(async (req, res) => {
       return json(res, 201, { ok: true });
     }
 
+    // ===== 持仓管理 =====
+    if (url.pathname === '/api/portfolio') {
+      if (req.method === 'GET') {
+        const pf = await loadPortfolio();
+        // 批量获取现价
+        const codes = pf.positions.map(p => p.code);
+        const quotes = {};
+        if (codes.length) {
+          const results = await batchRun([...new Set(codes)], async code => {
+            try { const q = await quote(code); return { code, price: q.price, changePct: q.changePct }; }
+            catch { return { code, price: null, changePct: null }; }
+          }, 3);
+          results.forEach(r => { if (r.status === 'fulfilled' && r.value) quotes[r.value.code] = r.value; });
+        }
+        const positions = pf.positions.map(p => {
+          const q = quotes[p.code] || {};
+          const calc = calcPosition(p, q.price);
+          return { ...p, price: q.price ?? null, changePct: q.changePct ?? null, ...calc };
+        });
+        // 汇总
+        const totalCost = positions.reduce((s, p) => s + p.cost, 0);
+        const totalValue = positions.reduce((s, p) => s + p.marketValue, 0);
+        const totalPnl = totalValue - totalCost;
+        const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+        const todayPnl = positions.reduce((s, p) => s + (p.changePct != null ? p.cost * (p.changePct / 100) : 0), 0);
+        log('GET', url.pathname, 200, Date.now() - start);
+        return json(res, 200, {
+          ok: true,
+          positions,
+          summary: { totalCost, totalValue, totalPnl, totalPnlPct, todayPnl, count: positions.length },
+        });
+      }
+      // POST 新增持仓
+      const bodyData = await body(req);
+      const { code, name, shares, costPrice, note, group } = bodyData;
+      if (!/^\d{6}$/.test(String(code || ''))) return json(res, 400, { error: '股票代码不正确' });
+      const sharesNum = Number(shares), costNum = Number(costPrice);
+      if (!Number.isFinite(sharesNum) || sharesNum <= 0) return json(res, 400, { error: '持仓数量需为正数' });
+      if (!Number.isFinite(costNum) || costNum <= 0) return json(res, 400, { error: '成本价需为正数' });
+      const pf = await loadPortfolio();
+      // 同一股票合并？默认：已有持仓则合并
+      const existing = pf.positions.find(p => p.code === String(code));
+      if (existing) {
+        // 合并：加权平均成本
+        const totalShares = existing.shares + sharesNum;
+        existing.costPrice = (existing.shares * existing.costPrice + sharesNum * costNum) / totalShares;
+        existing.shares = totalShares;
+        existing.note = note || existing.note;
+      } else {
+        pf.positions.push({
+          id: randomUUID(),
+          code: String(code),
+          name: String(name || code),
+          shares: sharesNum,
+          costPrice: costNum,
+          note: String(note || ''),
+          group: String(group || '持仓'),
+          createdAt: new Date().toISOString(),
+        });
+      }
+      pf.trades.push({ id: randomUUID(), code: String(code), name: String(name || code), direction: 'buy', shares: sharesNum, price: costNum, amount: sharesNum * costNum, reason: String(note || ''), createdAt: new Date().toISOString() });
+      await savePortfolio(pf);
+      log('POST', url.pathname, 201, Date.now() - start);
+      return json(res, 201, { ok: true });
+    }
+
+    // PUT 修改持仓（加仓/减仓/改成本）
+    if (req.method === 'PUT' && /^\/api\/portfolio\/[^/]+$/.test(url.pathname)) {
+      const id = url.pathname.split('/').at(-1);
+      const bodyData = await body(req);
+      const pf = await loadPortfolio();
+      const pos = pf.positions.find(p => p.id === id);
+      if (!pos) return json(res, 404, { error: '持仓不存在' });
+      const { shares, costPrice, note, group } = bodyData;
+      if (shares != null) {
+        const n = Number(shares);
+        if (!Number.isFinite(n) || n < 0) return json(res, 400, { error: '持仓数量不能为负' });
+        if (n === 0) {
+          // 清仓：移除并记卖出流水
+          pf.trades.push({ id: randomUUID(), code: pos.code, name: pos.name, direction: 'sell', shares: pos.shares, price: pos.costPrice, amount: pos.shares * pos.costPrice, reason: '清仓', createdAt: new Date().toISOString() });
+          pf.positions = pf.positions.filter(p => p.id !== id);
+          await savePortfolio(pf);
+          return json(res, 200, { ok: true });
+        }
+        pos.shares = n;
+      }
+      if (costPrice != null) {
+        const c = Number(costPrice);
+        if (!Number.isFinite(c) || c <= 0) return json(res, 400, { error: '成本价需为正数' });
+        pos.costPrice = c;
+      }
+      if (note != null) pos.note = String(note);
+      if (group != null) pos.group = String(group);
+      await savePortfolio(pf);
+      log('PUT', url.pathname, 200, Date.now() - start);
+      return json(res, 200, { ok: true });
+    }
+
+    // DELETE 删除持仓
+    if (req.method === 'DELETE' && /^\/api\/portfolio\/[^/]+$/.test(url.pathname)) {
+      const id = url.pathname.split('/').at(-1);
+      const pf = await loadPortfolio();
+      pf.positions = pf.positions.filter(p => p.id !== id);
+      await savePortfolio(pf);
+      log('DELETE', url.pathname, 200, Date.now() - start);
+      return json(res, 200, { ok: true });
+    }
+
+    // 交易流水
+    if (req.method === 'GET' && url.pathname === '/api/portfolio/trades') {
+      const pf = await loadPortfolio();
+      log('GET', url.pathname, 200, Date.now() - start);
+      return json(res, 200, { ok: true, trades: pf.trades.slice(-50).reverse() });
+    }
+
     if (req.method === 'GET') {
       const file = join(STATIC, route(url.pathname));
       if (!file.startsWith(STATIC)) return json(res, 403, { error: 'Forbidden' });
@@ -454,4 +587,4 @@ const server = http.createServer(async (req, res) => {
 
 if (require.main === module) server.listen(PORT, () => console.log(`牛股体检站运行于 http://localhost:${PORT}`));
 
-module.exports = { reportFrom, market, detectPatterns, murphyIndicators, detectClassicPatterns };
+module.exports = { reportFrom, market, detectPatterns, murphyIndicators, detectClassicPatterns, calcPosition };

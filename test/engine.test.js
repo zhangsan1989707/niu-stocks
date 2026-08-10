@@ -464,3 +464,45 @@ test('综合：完整体检报告包含所有 P0+P1+P2 字段', () => {
   assert.ok(result.broke_type !== undefined, 'P2-3: broke_type');
   assert.ok(result.quote.source, 'P2-4: source');
 });
+
+
+// === P0: 持仓管理测试 ===
+
+test('P0-1: calcPosition 计算盈亏正确', () => {
+  const { calcPosition } = require('../server');
+  const pos = { shares: 100, costPrice: 10 };
+  const r = calcPosition(pos, 12);
+  assert.equal(r.cost, 1000);
+  assert.equal(r.marketValue, 1200);
+  assert.equal(r.pnl, 200);
+  assert.ok(Math.abs(r.pnlPct - 20) < 0.001, '收益率应为20%');
+});
+
+test('P0-1: calcPosition 亏损时 pnl 为负', () => {
+  const { calcPosition } = require('../server');
+  const pos = { shares: 200, costPrice: 15 };
+  const r = calcPosition(pos, 12);
+  assert.equal(r.pnl, -600);
+  assert.ok(r.pnlPct < 0);
+});
+
+test('P0-1: calcPosition 无现价时返回成本价', () => {
+  const { calcPosition } = require('../server');
+  const pos = { shares: 100, costPrice: 20 };
+  const r = calcPosition(pos, null);
+  assert.equal(r.marketValue, 2000);
+  assert.equal(r.pnl, 0);
+});
+
+test('P0-1: 持仓数据持久化到 portfolio.json', async () => {
+  const { mkdir, readFile, writeFile } = require('node:fs/promises');
+  const { join } = require('node:path');
+  const dir = join(require('node:path').dirname(require.resolve('../server')), 'data');
+  const file = join(dir, 'portfolio.json');
+  await mkdir(dir, { recursive: true });
+  await writeFile(file, JSON.stringify({ positions: [{ id: 'test1', code: '600519', name: '贵州茅台', shares: 100, costPrice: 1450.5 }], trades: [] }));
+  const loaded = JSON.parse(await readFile(file, 'utf8'));
+  assert.equal(loaded.positions.length, 1);
+  assert.equal(loaded.positions[0].code, '600519');
+  assert.equal(loaded.positions[0].shares, 100);
+});

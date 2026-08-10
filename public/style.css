@@ -955,6 +955,47 @@ footer {
 
 
 
+
+/* ========== Portfolio (工作台) ========== */
+.port-toolbar { display: flex; gap: 10px; margin: 12px 0 16px; flex-wrap: wrap; }
+.port-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 14px 0; }
+.ps-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow-sm); }
+.ps-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+.ps-value { font-size: 20px; font-weight: 800; font-family: var(--mono); }
+.ps-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.port-result:hover { border-color: var(--blue); }
+.trade-item { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line-soft); font-size: 13px; flex-wrap: wrap; }
+.trade-item:last-child { border-bottom: 0; }
+.trade-item b { font-weight: 600; }
+.trade-item small { color: var(--faint); }
+.trade-item .tamt { font-family: var(--mono); font-weight: 700; margin-left: auto; }
+.trade-item .tdate { color: var(--faint); font-size: 12px; }
+.trade-item .treason { color: var(--muted); font-size: 12px; width: 100%; }
+.tdir { display: inline-block; font-size: 11px; font-weight: 800; border-radius: 6px; padding: 2px 8px; }
+.tdir.buy { background: var(--red-soft); color: var(--red); }
+.tdir.sell { background: var(--good-soft); color: var(--good); }
+.lightdot { font-size: 12px; font-weight: 700; border-radius: 20px; padding: 3px 10px; white-space: nowrap; }
+.lightdot.red { background: var(--red-soft); color: var(--red); }
+.lightdot.yellow { background: var(--amber-soft); color: var(--amber); }
+.lightdot.green { background: var(--good-soft); color: var(--good); }
+.lightdot.idle { background: var(--line-soft); color: var(--muted); }
+
+/* Modal */
+.modal { position: fixed; inset: 0; z-index: 100; background: rgba(30,41,59,.5); display: flex; align-items: center; justify-content: center; padding: 18px; }
+.modal-box { background: var(--card); border-radius: 16px; max-width: 420px; width: 100%; padding: 22px; box-shadow: var(--shadow-xl); }
+.modal-box h3 { margin: 0 0 14px; font-size: 18px; }
+.modal-box label { display: block; margin-bottom: 12px; font-size: 13px; color: var(--ink-soft); font-weight: 600; }
+.modal-box label input { display: block; width: 100%; margin-top: 5px; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 14px; outline: 0; transition: border-color .15s; background: var(--card); }
+.modal-box label input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(79,108,174,.1); }
+.modal-actions { display: flex; gap: 8px; margin-top: 16px; align-items: center; }
+.modal-actions .danger:hover { border-color: var(--red); background: var(--red-soft); }
+.mini { border: 1px solid var(--blue-line); background: var(--blue-soft); color: var(--blue-dark); border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.mini:hover { filter: brightness(.98); }
+@media (max-width: 760px) {
+  .port-summary { grid-template-columns: repeat(2, 1fr); }
+  .ps-card { padding: 11px 13px; }
+  .ps-value { font-size: 16px; }
+}
 /* ========== Rules Page (规则页) ========== */
 .book-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 8px 0; }
 .book-card { padding: 14px 16px; background: var(--bg); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); }
