@@ -42,6 +42,19 @@ function renderMurphy(m) {
   return `<div class="seclbl">摆动指标组 · 墨菲《金融市场技术分析》<span style="font-weight:400;color:#9098a9;font-size:12px">（${m.factors.length} 项，本组 ${m.pts > 0 ? '+' + m.pts : m.pts} 分）</span></div><div class="dims">${rows}</div>`;
 }
 
+// --- 经典图表形态渲染（P2-1）---
+function renderClassicPatterns(cp) {
+  if (!cp || !cp.ok) return '';
+  if (!cp.patterns.length) return `<div class="seclbl">经典图表形态<span style="font-weight:400;color:#9098a9;font-size:12px">（本次未识别形态，计 0 分）</span></div><div class="dims"><div class="dimrow2 neu"><span class="fpts idle">·</span><span class="dn">形态扫描</span><span class="dwhy">未识别明显经典图表形态（头肩 / 双顶双底 / 三重 / 三角形 / 箱体）</span></div></div>`;
+  const rows = cp.patterns.map(p => {
+    const cls = p.dir === 'bull' ? 'pos' : p.dir === 'bear' ? 'neg' : 'neu';
+    const badge = p.pts > 0 ? '+' + p.pts : p.pts < 0 ? '' + p.pts : '·';
+    const conf = p.confirmed ? '<b style="color:#bb4339">●已确认</b> ' : '<span style="color:#9098a9">○成型中</span> ';
+    return `<div class="dimrow2 ${cls}"><span class="fpts ${p.pts ? '' : 'idle'}">${badge}</span><span class="dn">${escape(p.name)}</span><span class="dwhy">${conf}${escape(p.plain)}</span></div>`;
+  }).join('');
+  return `<div class="seclbl">经典图表形态<span style="font-weight:400;color:#9098a9;font-size:12px">（本组 ${cp.pts > 0 ? '+' + cp.pts : cp.pts} 分）</span></div><div class="dims">${rows}</div>`;
+}
+
 // --- 增强 K 线图 ---
 function drawChart(chart) {
   if (!chart || !chart.bars || chart.bars.length < 2) return '<div class="empty">暂无足够K线</div>';
@@ -256,6 +269,7 @@ function renderReport(data) {
     <button id="favorite" class="primary full">收藏到自选</button></article></div>
     ${card('蜡烛形态', `<p class="report-note">已扫描 ${data.pat_scanned} 种形态，命中 ${data.pat_hit} 种</p><div class="pats" style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 0">${patternChips(data.patterns)}</div>`, 'report-card')}
     ${card('摆动指标组', renderMurphy(data.murphy), 'report-card')}
+    ${card('经典图表形态', renderClassicPatterns(data.patterns_classic), 'report-card')}
     ${card('四方会诊', renderConsult(data.consult), 'report-card')}
     ${card('全部校验', `<p class="report-note">每次体检会对趋势、均线、量价与动量指标执行同一套规则。</p>${data.scan_dims.map(d => `<div class="check"><i>${d.note.includes('跌破') || d.note.includes('偏弱') || d.note.includes('死叉') || d.note.includes('超买') ? '·' : '✓'}</i><b>${escape(d.name)}</b><span>${escape(d.note)}</span></div>`).join('')}`, 'report-card')}
     <div id="favorites"></div>`);

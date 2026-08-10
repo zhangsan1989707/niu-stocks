@@ -6,6 +6,7 @@ const { join, extname } = require('node:path');
 const { average, ema, Cache } = require('./lib/helpers');
 const { detectPatterns } = require('./lib/patterns');
 const { murphyIndicators } = require('./lib/indicators');
+const { detectClassicPatterns } = require('./lib/classic-patterns');
 
 const PORT = Number(process.env.PORT || 4317);
 const ROOT = __dirname;
@@ -22,10 +23,14 @@ const type = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascri
 // --- 数据缓存 ---
 const cache = new Cache();
 
-// --- 日志 ---
+// --- 日志（P2-5 增强）---
 function log(method, path, status, ms) {
   const ts = new Date().toLocaleTimeString('zh-CN', { hour12: false });
   console.log(`[${ts}] ${method} ${path} → ${status} (${ms}ms)`);
+}
+function logFallback(code, from, to, reason) {
+  const ts = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  console.log(`[${ts}] [降级] ${code} ${from} → ${to}（${reason}）`);
 }
 
 // --- DB ---
@@ -59,9 +64,10 @@ async function quote(code) {
   const cacheKey = cache.key('quote', code);
   const cached = cache.get(cacheKey);
   if (cached) { cached.cached = true; return cached; }
-  let result;
+  let result, source = '腾讯财经';
   try { result = await tencentQuote(code); }
-  catch { result = await eastmoneyQuote(code); }
+  catch (e) { logFallback(code, '腾讯财经', '东方财富', e.message); source = '东方财富'; result = await eastmoneyQuote(code); }
+  if (result) result.source = source;
   cache.set(cacheKey, result);
   return result;
 }
@@ -86,7 +92,7 @@ async function klines(code) {
   if (cached) return cached;
   let result;
   try { result = await tencentKlines(code); }
-  catch { result = await eastmoneyKlines(code); }
+  catch (e) { logFallback(code, '腾讯K线', '东方财富K线', e.message); result = await eastmoneyKlines(code); }
   cache.set(cacheKey, result);
   return result;
 }
@@ -112,6 +118,9 @@ function reportFrom(quoteData, candles) {
   // --- 蜡烛形态识别 ---
   const patterns = detectPatterns(candles);
 
+  // --- 经典图表形态（P2-1）---
+  const patternsClassic = detectClassicPatterns(candles);
+
   // --- 墨菲摆动指标组 ---
   const murphy = murphyIndicators(candles);
 
@@ -129,6 +138,9 @@ function reportFrom(quoteData, candles) {
 
   // 摆动指标组加分
   score += murphy.pts;
+
+  // 经典图表形态加分（P2-1）
+  score += patternsClassic.pts;
 
   // 破位检测：支撑破位优先于 MA60
   let brokeType = null, brokeIdx = -1;
@@ -167,6 +179,7 @@ function reportFrom(quoteData, candles) {
   else if (rsiValue < 30) factors.push({ dim: 'rsi', pts: 2, text: `RSI ${rsiValue.toFixed(1)} 超卖` });
   if (patternPts !== 0) factors.push({ dim: 'pattern', pts: patternPts, text: `蜡烛形态 ${patterns.length} 种命中` });
   if (murphy.pts !== 0) factors.push({ dim: 'murphy', pts: murphy.pts, text: `摆动指标组 ${murphy.lean}` });
+  if (patternsClassic.pts !== 0) factors.push({ dim: 'classic_pattern', pts: patternsClassic.pts, text: `经典图表形态 ${patternsClassic.patterns.length} 种命中` });
 
   // --- 四方会诊 ---
   const patBullW = patterns.filter(p => p.dir === 'bull').reduce((s, p) => s + p.weight, 0);
@@ -174,7 +187,10 @@ function reportFrom(quoteData, candles) {
   const L1 = patBullW > patBearW ? '偏多' : patBearW > patBullW ? '偏空' : '中性';
   const L2 = brokeType ? '偏空·已破位' : trend === 'up' ? '偏多' : trend === 'down' ? '偏空' : '中性·震荡';
   const L3 = murphy.lean;
-  const L4 = patterns.length ? (patBullW > patBearW ? '偏多' : patBearW > patBullW ? '偏空' : '中性') : '无形态';
+  // 四方会诊中 L4 使用经典图表形态
+  const classicBullW = patternsClassic.patterns.filter(p => p.dir === 'bull').reduce((s, p) => s + Math.abs(p.pts), 0);
+  const classicBearW = patternsClassic.patterns.filter(p => p.dir === 'bear').reduce((s, p) => s + Math.abs(p.pts), 0);
+  const L4 = patternsClassic.patterns.length ? (classicBullW > classicBearW ? '偏多' : classicBearW > classicBullW ? '偏空' : '中性') : (patterns.length ? (patBullW > patBearW ? '偏多' : patBearW > patBullW ? '偏空' : '中性') : '无形态');
   const sides = [L1, L2, L3, L4];
   const bulls = sides.filter(x => x === '偏多').length;
   const bears = sides.filter(x => x.includes('偏空')).length;
@@ -211,6 +227,7 @@ function reportFrom(quoteData, candles) {
     patterns,
     pat_scanned: 29,
     pat_hit: patterns.length,
+    patterns_classic: patternsClassic,
     scan_dims,
     factors,
     murphy,
@@ -286,6 +303,41 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 批量获取自选行情摘要
+    if (req.method === 'GET' && url.pathname === '/api/favreport') {
+      const favCodes = db.favorites.map(f => f.code);
+      if (!favCodes.length) { log('GET', url.pathname, 200, Date.now() - start); return json(res, 200, { ok: true, date: new Date().toISOString().slice(0, 10), items: [], changes: [] }); }
+      const today = new Date().toISOString().slice(0, 10);
+      const historyDir = join(DATA_DIR, 'fav-history');
+      const historyFile = join(historyDir, `${today}.json`);
+      let todayData = null;
+      try { todayData = JSON.parse(await readFile(historyFile, 'utf8')); } catch {}
+      if (!todayData) {
+        // 首次：生成今日快照
+        const results = await batchRun(favCodes, code => stockReport(code).then(r => ({ code: r.code, name: r.name, light: r.light, health: r.health })), 3);
+        todayData = { date: today, items: results.filter(r => r.status === 'fulfilled').map(r => r.value) };
+        try { await mkdir(historyDir, { recursive: true }); await writeFile(historyFile, JSON.stringify(todayData, null, 2)); } catch {}
+      }
+      // 读昨日数据对比
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const yesterdayFile = join(historyDir, `${yesterday}.json`);
+      let prevData = null;
+      try { prevData = JSON.parse(await readFile(yesterdayFile, 'utf8')); } catch {}
+      let changes = [];
+      if (prevData) {
+        const prevMap = {};
+        prevData.items.forEach(item => { prevMap[item.code] = item; });
+        changes = todayData.items.filter(item => {
+          const prev = prevMap[item.code];
+          return prev && prev.light !== item.light;
+        }).map(item => {
+          const prev = prevMap[item.code];
+          return { code: item.code, name: item.name, prev_light: prev.light, prev_score: prev.health, light: item.light, score: item.health };
+        });
+      }
+      log('GET', url.pathname, 200, Date.now() - start);
+      return json(res, 200, { ok: true, date: today, prev_date: prevData ? prevData.date : null, items: todayData.items, changes });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/favorites/quotes') {
       const favCodes = db.favorites.map(f => f.code);
       if (!favCodes.length) { log('GET', url.pathname, 200, Date.now() - start); return json(res, 200, { ok: true, items: [] }); }
@@ -334,11 +386,22 @@ const server = http.createServer(async (req, res) => {
     log(req.method, url.pathname, 404, Date.now() - start);
     json(res, 404, { error: 'Not found' });
   } catch (error) {
-    log(req.method, url.pathname, 502, Date.now() - start);
-    json(res, 502, { error: error.message || '服务暂不可用，请稍后重试' });
+    const ms = Date.now() - start;
+    const status = error.message?.includes('timeout') || error.name === 'TimeoutError' ? 504
+      : error.message?.includes('未找到') ? 404
+      : error.message?.includes('请求格式') ? 400
+      : 502;
+    log(req.method, url.pathname, status, ms);
+    const errMsg = status === 504 ? '行情服务响应超时，请稍后重试'
+      : status === 404 ? error.message
+      : status === 400 ? error.message
+      : error.message || '服务暂不可用，请稍后重试';
+    json(res, status, { error: errMsg, source: 'error' });
   }
 });
 
 if (require.main === module) server.listen(PORT, () => console.log(`牛股体检站运行于 http://localhost:${PORT}`));
 
-module.exports = { reportFrom, market, detectPatterns, murphyIndicators };
+module.exports = { reportFrom, market, detectPatterns, murphyIndicators, detectClassicPatterns };
+
+const { detectClassicPatterns: _dcp } = require('./lib/classic-patterns');
