@@ -950,6 +950,40 @@ footer {
 .dimrow2 .dwhy { flex: 1; color: var(--muted); line-height: 1.5; }
 .dimrow2.pos .dwhy, .dimrow2.neg .dwhy { color: var(--ink-soft); }
 
+
+
+/* ========== Tooltip ========== */
+.has-tip { cursor: help; position: relative; }
+.patchip.has-tip:hover, .dimrow2.has-tip:hover { filter: brightness(.95); }
+
+.ct-tooltip {
+  position: fixed;
+  z-index: 200;
+  max-width: 340px;
+  padding: 12px 14px;
+  background: rgba(30,41,59,.96);
+  color: #f1f5f9;
+  font-size: 13px;
+  line-height: 1.6;
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.28);
+  pointer-events: none;
+  animation: tipIn .18s ease;
+  backdrop-filter: blur(8px);
+}
+
+.ct-tt-mean { margin-bottom: 4px; }
+.ct-tt-signal { color: #fbbf24; font-weight: 600; font-size: 12.5px; border-top: 1px solid rgba(255,255,255,.12); padding-top: 6px; margin-top: 4px; }
+
+@keyframes tipIn {
+  from { opacity: 0; transform: translate(-50%, 4px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (max-width: 760px) {
+  .ct-tooltip { max-width: 260px; font-size: 12px; }
+}
+
 /* ========== Responsive ========== */
 @media (max-width: 760px) {
   header { padding: 0 14px; height: auto; min-height: 56px; gap: 10px; flex-wrap: wrap; }

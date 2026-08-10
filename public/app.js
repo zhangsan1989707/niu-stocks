@@ -11,7 +11,11 @@ function loading() { app.innerHTML = '<section class="page"><div class="loading"
 // --- 形态标签 ---
 function patternChips(patterns) {
   if (!patterns || !patterns.length) return '<span class="patchip neu">无明显形态</span>';
-  return patterns.map(p => `<span class="patchip ${p.dir === 'bull' ? 'bull' : p.dir === 'bear' ? 'bear' : 'neu'}">${p.name}</span>`).join('');
+  return patterns.map(p => {
+    const desc = PATTERN_DESC[p.name];
+    const tt = desc ? `data-tooltip="${desc.meaning}" data-tooltip-signal="${desc.signal}"` : '';
+    return `<span class="patchip has-tip ${p.dir === 'bull' ? 'bull' : p.dir === 'bear' ? 'bear' : 'neu'}" ${tt}>${p.name}</span>`;
+  }).join('');
 }
 
 // --- 四方会诊渲染 ---
@@ -37,7 +41,9 @@ function renderMurphy(m) {
   const rows = m.factors.map(f => {
     const cls = f.dir === 'bull' ? 'pos' : f.dir === 'bear' ? 'neg' : 'neu';
     const badge = f.pts > 0 ? '+' + f.pts : f.pts < 0 ? '' + f.pts : '·';
-    return `<div class="dimrow2 ${cls}"><span class="fpts ${f.pts ? '' : 'idle'}">${badge}</span><span class="dn">${escape(f.name)}</span><span class="dwhy">${escape(f.plain)}</span></div>`;
+    const desc = INDICATOR_DESC[f.name];
+    const tt = desc ? `data-tooltip="${desc.meaning}" data-tooltip-signal="${desc.hint}"` : '';
+    return `<div class="dimrow2 ${cls} has-tip" ${tt}><span class="fpts ${f.pts ? '' : 'idle'}">${badge}</span><span class="dn">${escape(f.name)}</span><span class="dwhy">${escape(f.plain)}</span></div>`;
   }).join('');
   return `<div class="seclbl">摆动指标组 · 墨菲《金融市场技术分析》<span style="font-weight:400;color:#9098a9;font-size:12px">（${m.factors.length} 项，本组 ${m.pts > 0 ? '+' + m.pts : m.pts} 分）</span></div><div class="dims">${rows}</div>`;
 }
@@ -50,7 +56,9 @@ function renderClassicPatterns(cp) {
     const cls = p.dir === 'bull' ? 'pos' : p.dir === 'bear' ? 'neg' : 'neu';
     const badge = p.pts > 0 ? '+' + p.pts : p.pts < 0 ? '' + p.pts : '·';
     const conf = p.confirmed ? '<b style="color:#bb4339">●已确认</b> ' : '<span style="color:#9098a9">○成型中</span> ';
-    return `<div class="dimrow2 ${cls}"><span class="fpts ${p.pts ? '' : 'idle'}">${badge}</span><span class="dn">${escape(p.name)}</span><span class="dwhy">${conf}${escape(p.plain)}</span></div>`;
+    const desc = CLASSIC_PATTERN_DESC[p.name];
+    const tt = desc ? `data-tooltip="${desc.meaning}" data-tooltip-signal="${desc.hint}"` : '';
+    return `<div class="dimrow2 ${cls} has-tip" ${tt}><span class="fpts ${p.pts ? '' : 'idle'}">${badge}</span><span class="dn">${escape(p.name)}</span><span class="dwhy">${conf}${escape(p.plain)}</span></div>`;
   }).join('');
   return `<div class="seclbl">经典图表形态<span style="font-weight:400;color:#9098a9;font-size:12px">（本组 ${cp.pts > 0 ? '+' + cp.pts : cp.pts} 分）</span></div><div class="dims">${rows}</div>`;
 }
@@ -135,6 +143,65 @@ function hideTip() { const t = document.getElementById('chartTip'); if (t) t.sty
 
 // --- 体检动画 ---
 const PATLIB = [['看跌吞没','空'],['看涨吞没','多'],['乌云盖顶','空'],['刺透形态','多'],['看跌反击线','空'],['看涨反击线','多'],['锤子线','多'],['上吊线','空'],['倒锤子','多'],['流星线','空'],['墓碑十字','空'],['蜻蜓十字','多'],['顶部十字星','空'],['底部十字星','多'],['十字星','中'],['高位小实体','中'],['看跌孕线','空'],['看涨孕线','多'],['十字孕线','空'],['黄昏星','空'],['启明星','多'],['三只乌鸦','空'],['白色三兵','多'],['上升三法','多'],['下降三法','空'],['平头顶','空'],['平头底','多'],['向上跳空缺口','多'],['向下跳空缺口','空']];
+
+// 形态含义说明
+const PATTERN_DESC = {
+  '看跌吞没': { meaning: '大阴线完全吞没前一日小阳线，空方压倒性优势', signal: '顶部反转信号，提示上涨动能衰竭' },
+  '看涨吞没': { meaning: '大阳线完全吞没前一日小阴线，多方压倒性优势', signal: '底部反转信号，提示下跌动能衰竭' },
+  '乌云盖顶': { meaning: '开盘创新高后大幅回落，收盘深入前日阳线实体一半以下', signal: '顶部反转信号，高位抛压明显' },
+  '刺透形态': { meaning: '开盘创新低后大幅回升，收盘深入前日阴线实体一半以上', signal: '底部反转信号，低位承接有力' },
+  '看跌反击线': { meaning: '两日收盘价几乎相同，但当前阴线开盘远高于前日阳线收盘', signal: '上升受阻信号，上行动能不足' },
+  '看涨反击线': { meaning: '两日收盘价几乎相同，但当前阳线开盘远低于前日阴线收盘', signal: '下跌遇支撑信号，下行动能减弱' },
+  '锤子线': { meaning: '小实体在上、长下影线（≥2倍实体），下跌后出现', signal: '底部反转信号，空方打压后多方收复' },
+  '上吊线': { meaning: '小实体在上、长下影线（≥2倍实体），上涨后出现', signal: '顶部警示信号，多方推高后空方反扑' },
+  '倒锤子': { meaning: '小实体在下、长上影线（≥2倍实体）', signal: '底部试探信号，多方尝试推高但被压制' },
+  '流星线': { meaning: '小实体在下、长上影线（≥2倍实体），上涨后出现', signal: '顶部反转信号，冲高回落说明抛压重' },
+  '墓碑十字': { meaning: '开收于最低点附近，长上影线', signal: '顶部反转信号，涨停/冲高全被砸回' },
+  '蜻蜓十字': { meaning: '开收于最高点附近，长下影线', signal: '底部反转信号，大跌全被拉回' },
+  '顶部十字星': { meaning: '上升趋势后出现十字星（开≈收）', signal: '趋势犹豫信号，多空平衡，可能变盘' },
+  '底部十字星': { meaning: '下降趋势后出现十字星（开≈收）', signal: '趋势犹豫信号，空方力竭，可能企稳' },
+  '十字星': { meaning: '开盘收盘几乎相同，实体极小', signal: '犹豫/平衡信号，等待下一根K线确认方向' },
+  '高位小实体': { meaning: '一段上涨后出现实体很小的K线', signal: '上行动能衰减信号，谨慎观察' },
+  '看跌孕线': { meaning: '大阳线后跟一根小阴线，被完全包含在前日实体中', signal: '趋势减弱信号，多方力量消退' },
+  '看涨孕线': { meaning: '大阴线后跟一根小阳线，被完全包含在前日实体中', signal: '趋势减弱信号，空方力量消退' },
+  '十字孕线': { meaning: '大K线后跟一根十字星，被包含在前日实体中', signal: '强烈反转预警，趋势可能结束' },
+  '黄昏星': { meaning: '阳线→小实体（跳空）→阴线深入第一根中部以下', signal: '经典顶部三K反转，上涨趋势终结信号' },
+  '启明星': { meaning: '阴线→小实体（跳空）→阳线深入第一根中部以上', signal: '经典底部三K反转，下跌趋势终结信号' },
+  '三只乌鸦': { meaning: '连续三根阴线，收盘价逐日递减', signal: '强烈看空信号，持续抛售' },
+  '白色三兵': { meaning: '连续三根阳线，收盘价逐日递增', signal: '强烈看多信号，持续买入' },
+  '上升三法': { meaning: '阳+三根小阴+阳，小阴线在第一根范围内', signal: '上涨中继信号，短暂回调后继续上攻' },
+  '下降三法': { meaning: '阴+三根小阳+阴，小阳线在第一根范围内', signal: '下跌中继信号，短暂反弹后继续下跌' },
+  '平头顶': { meaning: '连续两根K线最高价几乎相同', signal: '顶部受阻信号，上方有压力' },
+  '平头底': { meaning: '连续两根K线最低价几乎相同', signal: '底部支撑信号，下方有承接' },
+  '向上跳空缺口': { meaning: '今日最低价高于昨日最高价', signal: '强势突破信号，买方踊跃追涨' },
+  '向下跳空缺口': { meaning: '今日最高价低于昨日最低价', signal: '恐慌出逃信号，卖方压倒性优势' },
+};
+
+// 指标含义说明
+const INDICATOR_DESC = {
+  'KDJ-K': { meaning: '随机指标快线，9日RSV的加权平均', hint: '>80超买区域有回调风险；<20超卖区域有反弹可能' },
+  'KDJ-D': { meaning: '随机指标慢线，K线的3日移动平均', hint: 'K线下穿D线为死叉卖出信号；K线上穿D线为金叉买入信号' },
+  'KDJ-J': { meaning: 'KDJ的J线，K和D的差值放大', hint: 'J>100极端超买；J<0极端超卖；对转折更敏感' },
+  'RSI-6': { meaning: '6日相对强弱指标，短期动量', hint: '>80短期超买（追涨过热）；<20短期超卖（杀跌过度）' },
+  'RSI-12': { meaning: '12日相对强弱指标，中期动量', hint: '>70中期超买；<30中期超卖；50以上偏多' },
+  'WR': { meaning: '威廉指标，衡量收盘价在区间内的位置', hint: '> -20为超买（多头力竭）；< -80为超卖（空头力竭）' },
+  'CCI': { meaning: '商品通道指标，衡量价格偏离均值的程度', hint: '>100趋势偏强；<-100趋势偏弱；0附近无方向' },
+};
+
+// 经典图表形态含义说明
+const CLASSIC_PATTERN_DESC = {
+  '头肩顶': { meaning: '三个峰：肩-头（最高）-肩，头部高于两肩', hint: '经典顶部反转结构，跌破颈线（两谷连线）确认' },
+  '头肩底': { meaning: '三个谷：肩-头（最低）-肩，头部低于两肩', hint: '经典底部反转结构，突破颈线（两峰连线）确认' },
+  '双顶': { meaning: '两个相近高度的峰，中间一个谷', hint: '顶部受阻形态，M头，跌破中间谷底确认看空' },
+  '双底': { meaning: '两个相近高度的谷，中间一个峰', hint: '底部支撑形态，W底，突破中间峰顶确认看多' },
+  '三重顶': { meaning: '三个相近高度的峰', hint: '强阻力位，多次冲关失败后可能大跌' },
+  '三重底': { meaning: '三个相近高度的谷', hint: '强支撑位，多次探底不破后可能大涨' },
+  '上升三角形': { meaning: '上沿平齐、下沿逐步抬高的收敛形态', hint: '偏多形态，买方力量积蓄，向上突破概率大' },
+  '下降三角形': { meaning: '下沿平齐、上沿逐步降低的收敛形态', hint: '偏空形态，卖方力量积蓄，向下突破概率大' },
+  '对称三角形': { meaning: '上下沿同时收敛的整理形态', hint: '整理形态，突破方向决定后续趋势' },
+  '矩形/箱体': { meaning: '价格在水平区间内反复震荡', hint: '震荡整理，突破上沿看多、跌破下沿看空' },
+};
+
 const PAT_COUNT = PATLIB.length, DIM_COUNT = 12, TOTAL_CHECKS = PAT_COUNT + DIM_COUNT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -218,6 +285,23 @@ async function playScanAnim(host, fetchP, opts = {}) {
 }
 
 // --- 页面 ---
+
+// 体检维度含义
+const SCAN_DIM_DESC = {
+  'trend': { meaning: '基于收盘价与MA60的关系判断当前趋势方向', hint: '站上MA60=上升趋势（偏多）；跌破MA60=趋势转弱' },
+  'ma60': { meaning: '60日均线，被称为"生命线"，是大资金的重要参考', hint: '价格站在MA60上方时中长期趋势健康' },
+  'support': { meaning: '近期20日最低点，是下方的"地板"支撑位', hint: '跌到附近常有资金接盘托一下；一旦跌破则支撑变压力' },
+  'ma5_ma20': { meaning: '短期均线（5日）与中期均线（20日）的排列关系', hint: 'MA5>MA20偏多，短线上攻；反之偏空，短线走弱' },
+  'volume': { meaning: '量比=今日成交量/过去5日平均成交量', hint: '≥1.5算放量，说明有真金白银进场；<1缩量观望' },
+  'macd': { meaning: 'MACD指标的快慢线交叉关系', hint: '金叉=DIF上穿DEA，短线多头信号；死叉=空头信号' },
+  'rsi': { meaning: '14日相对强弱指标，衡量近期涨跌幅的对比', hint: '>70偏强但可能超买（不宜追涨）；<30偏弱但可能超卖' },
+  'polarity': { meaning: '原先的支撑位跌破后变成阻力位（或反之）', hint: '均线下方时常遇反压；突破后回踩站稳才是有效突破' },
+  'fake': { meaning: '盘中跌破支撑但收盘收回（假摔）或短暂突破后回落（假突破）', hint: '假摔说明支撑有效，买方接盘有力；假突破说明压力有效' },
+  'murphy': { meaning: '基于墨菲《金融市场技术分析》的摆动指标综合评估', hint: '含KDJ/RSI/WR/CCI共7项，综合判断超买超卖状态' },
+  'patterns': { meaning: '日本蜡烛图技术中29种经典K线形态的扫描结果', hint: '命中形态会在上方"蜡烛形态"卡片中详细展示' },
+  'drawdown': { meaning: '从过去60日最高点回落的幅度', hint: '回撤越大说明之前的"坑"越深，反弹压力越大' },
+};
+
 function checkPage() {
   layout('个股体检', `<div class="search-row"><div class="stock-search"><span>⌕</span><input id="stock-input" autocomplete="off" placeholder="输入公司名或代码，如 比亚迪 / 002594"><div id="suggestions" class="suggestions"></div></div><button id="report-btn" class="primary">体检</button></div>
     <a class="hot-banner" href="#/screen">🔥 不知道测哪只？看「回春法」今日精选的强势候选 →</a>
@@ -271,7 +355,11 @@ function renderReport(data) {
     ${card('摆动指标组', renderMurphy(data.murphy), 'report-card')}
     ${card('经典图表形态', renderClassicPatterns(data.patterns_classic), 'report-card')}
     ${card('四方会诊', renderConsult(data.consult), 'report-card')}
-    ${card('全部校验', `<p class="report-note">每次体检会对趋势、均线、量价与动量指标执行同一套规则。</p>${data.scan_dims.map(d => `<div class="check"><i>${d.note.includes('跌破') || d.note.includes('偏弱') || d.note.includes('死叉') || d.note.includes('超买') ? '·' : '✓'}</i><b>${escape(d.name)}</b><span>${escape(d.note)}</span></div>`).join('')}`, 'report-card')}
+    ${card('全部校验', `<p class="report-note">每次体检会对趋势、均线、量价与动量指标执行同一套规则。</p>${data.scan_dims.map(d => {
+    const desc = SCAN_DIM_DESC[d.key];
+    const tt = desc ? `data-tooltip="${desc.meaning}" data-tooltip-signal="${desc.hint}"` : '';
+    return `<div class="check has-tip" ${tt}><i>${d.note.includes('跌破') || d.note.includes('偏弱') || d.note.includes('死叉') || d.note.includes('超买') ? '·' : '✓'}</i><b>${escape(d.name)}</b><span>${escape(d.note)}</span></div>`;
+  }).join('')}`, 'report-card')}
     <div id="favorites"></div>`);
   document.querySelector('#back').onclick = () => { location.hash = '#/check'; checkPage(); };
   const chartEl = document.querySelector('#chart');
@@ -401,6 +489,55 @@ async function feedbackPage() {
   document.querySelector('#send-feedback').onclick = async () => { try { await api('/feedback', { method:'POST', body:JSON.stringify({message:document.querySelector('#feedback-message').value}) }); document.querySelector('#feedback-message').value = ''; notice('感谢反馈，已保存', true); render(); } catch (e) { notice(e.message); } };
   render();
 }
+
+
+// --- 通用 Tooltip ---
+let _tipTimer = null;
+function showTooltip(e, el) {
+  hideTooltip();
+  const tip = document.createElement('div');
+  tip.className = 'ct-tooltip';
+  tip.id = 'ctTooltip';
+  const meaning = el.dataset.tooltip || '';
+  const signal = el.dataset.tooltipSignal || '';
+  tip.innerHTML = `<div class="ct-tt-mean">${meaning}</div>${signal ? `<div class="ct-tt-signal">📌 ${signal}</div>` : ''}`;
+  document.body.appendChild(tip);
+  const rect = el.getBoundingClientRect();
+  let top = rect.bottom + 6;
+  let left = rect.left + rect.width / 2;
+  tip.style.top = top + 'px';
+  tip.style.left = left + 'px';
+  tip.style.transform = 'translateX(-50%)';
+  // Ensure within viewport
+  const tr = tip.getBoundingClientRect();
+  if (tr.right > window.innerWidth - 8) tip.style.left = (window.innerWidth - tr.width - 8) + 'px';
+  if (tr.left < 8) tip.style.left = '8px';
+  if (tr.bottom > window.innerHeight - 8) tip.style.top = (rect.top - tr.height - 6) + 'px';
+}
+function hideTooltip() {
+  const t = document.getElementById('ctTooltip');
+  if (t) t.remove();
+  clearTimeout(_tipTimer);
+}
+// Delegated event listeners for all has-tip elements
+document.addEventListener('mouseover', e => {
+  const el = e.target.closest('.has-tip');
+  if (!el || !el.dataset.tooltip) return;
+  _tipTimer = setTimeout(() => showTooltip(e, el), 300);
+});
+document.addEventListener('mouseout', e => {
+  const el = e.target.closest('.has-tip');
+  if (!el) return;
+  clearTimeout(_tipTimer);
+  hideTooltip();
+});
+document.addEventListener('touchstart', e => {
+  const el = e.target.closest('.has-tip');
+  if (!el || !el.dataset.tooltip) return;
+  e.preventDefault();
+  showTooltip(e, el);
+  _tipTimer = setTimeout(hideTooltip, 2800);
+});
 
 function router() {
   const path = location.hash.slice(2) || 'check';
