@@ -593,9 +593,156 @@ function rulesPage() {
     ${card('常见问题 FAQ', `<div class="faq"><div class="faq-item"><b>Q：体检分数会预测涨跌吗？</b><p>A：不会。分数只描述技术状态（趋势/动量/破位风险），不预测涨跌幅、不给目标价。尼森铁律：蜡烛图只给方向不给目标。</p></div><div class="faq-item"><b>Q：为什么同一天体检结果会变？</b><p>A：盘中行情实时变化，指标随最新价更新；另外缓存 30 秒内复用数据。收盘后体检最稳定（按收盘价判定）。</p></div><div class="faq-item"><b>Q：为什么有的股票查不到？</b><p>A：可能停牌或数据源暂时不可用，稍后重试；新股上市不足 60 天时 MA60 等长周期指标会用可用数据近似计算。</p></div></div>`)}
 
     ${card('全部校验标准', `<p>每查一只股票，引擎会一次性跑完 51 项规则：29 种蜡烛形态 + 10 类核心维度 + 墨菲摆动指标 7 项 + 经典图表形态 5 类。鼠标悬停在报告里的每项上可以看到精确含义。</p>
-    <p style="color:var(--muted);font-size:12.5px;margin-top:10px">本工具只看技术图形，判断"是否破位/能不能买"，不预测涨跌幅、不给目标价，不构成投资建议。<br>方法论来源：回春战法 + 史蒂夫·尼森《日本蜡烛图技术》+ 约翰·墨菲《金融市场技术分析》(均为丁圣元译)。</p>`)}`);
+    <p style="color:var(--muted);font-size:12.5px;margin-top:10px">本工具只看技术图形，判断"是否破位/能不能买"，不预测涨跌幅、不给目标价，不构成投资建议。<br>方法论来源：回春战法 + 史蒂夫·尼森《日本蜡烛图技术》+ 约翰·墨菲《金融市场技术分析》(均为丁圣元译)。</p>`)}
+
+    <div id="config-panel"></div>`);
+  loadConfig();
+}
+async function loadConfig() {
+  const panel = document.querySelector('#config-panel');
+  if (!panel) return;
+  try {
+    const { config } = await api('/config');
+    const fields = [
+      { key: 'macdFast', label: 'MACD 快线', hint: '默认 6，越小越灵敏' },
+      { key: 'macdSlow', label: 'MACD 慢线', hint: '默认 13' },
+      { key: 'macdSignal', label: 'MACD 信号线', hint: '默认 5' },
+      { key: 'volumeRatioThreshold', label: '放量量比阈值', hint: '默认 1.5' },
+      { key: 'healthScoreThreshold', label: '健康分门槛', hint: '默认 60，选股筛选用' },
+      { key: 'ma60Period', label: '生命线周期', hint: '默认 60' },
+    ];
+    panel.innerHTML = card('策略参数配置', `<p class="summary">修改体检引擎的技术参数。改完后新体检会立即生效，已出的体检结果不会变。</p>
+    <div class="config-grid">${fields.map(f => `<label class="cfg-item"><span class="cfg-label">${f.label}</span><input type="number" step="any" data-key="${f.key}" value="${config[f.key] ?? ''}" class="cfg-input"><span class="cfg-hint">${f.hint}</span></label>`).join('')}</div>
+    <div class="form-actions"><span id="cfg-status"></span><button class="primary" id="cfg-save">保存配置</button></div>`);
+    document.querySelector('#cfg-save').onclick = async () => {
+      const data = {};
+      panel.querySelectorAll('.cfg-input').forEach(inp => { const v = Number(inp.value); if (Number.isFinite(v)) data[inp.dataset.key] = v; });
+      try {
+        const { config: saved } = await api('/config', { method: 'PUT', body: JSON.stringify(data) });
+        panel.querySelectorAll('.cfg-input').forEach(inp => inp.value = saved[inp.dataset.key]);
+        notice('配置已保存，新体检将使用新参数', true);
+      } catch (e) { notice(e.message); }
+    };
+  } catch { panel.innerHTML = ''; }
 }
 
+// --- 回测页面 ---
+async function backtestPage() {
+  const main = document.querySelector('main');
+  main.innerHTML = `
+    <section class="card">
+      <h2>策略回测</h2>
+      <p class="muted">基于 MACD 金叉/死叉信号模拟历史交易回测，评估策略在特定股票上的表现。结果仅供参考，不构成投资建议。</p>
+      <div class="bt-form">
+        <div class="bt-field">
+          <label class="cfg-label" for="bt-code">股票代码</label>
+          <input class="cfg-input" id="bt-code" type="text" placeholder="如 600519" maxlength="6" value="">
+        </div>
+        <div class="bt-field">
+          <label class="cfg-label" for="bt-days">回测天数</label>
+          <select class="cfg-input" id="bt-days">
+            <option value="60">60 天</option>
+            <option value="120" selected>120 天</option>
+            <option value="180">180 天</option>
+            <option value="250">250 天（约一年）</option>
+          </select>
+        </div>
+        <button class="bt-run" id="bt-run">开始回测</button>
+      </div>
+    </section>
+    <div id="bt-result"></div>
+  `;
+
+  // 尝试填充当前选中股票
+  const cur = document.querySelector('#stockSelect');
+  if (cur && cur.value) {
+    const inp = document.querySelector('#bt-code');
+    if (inp) inp.value = cur.value;
+  }
+
+  const runBtn = document.querySelector('#bt-run');
+  const resultDiv = document.querySelector('#bt-result');
+
+  runBtn.onclick = async () => {
+    const code = document.querySelector('#bt-code').value.trim();
+    const days = document.querySelector('#bt-days').value;
+    if (!/^\d{6}$/.test(code)) { notice('请输入 6 位股票代码'); return; }
+
+    runBtn.disabled = true;
+    runBtn.textContent = '回测中…';
+    resultDiv.innerHTML = '<div class="card"><p class="muted center">正在计算回测数据…</p></div>';
+
+    try {
+      const res = await api(`/backtest?code=${code}&days=${days}`);
+      renderBacktestResult(res, code, days);
+    } catch (e) {
+      resultDiv.innerHTML = `<div class="card"><p class="error">回测失败：${e.message}</p></div>`;
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = '开始回测';
+    }
+  };
+}
+
+function renderBacktestResult(res, code, days) {
+  const div = document.querySelector('#bt-result');
+  if (!res.ok || !res.signals || res.signals.length === 0) {
+    div.innerHTML = `<div class="card"><p class="muted center">未产生任何交易信号，可能数据不足或该时间段内无金叉/死叉。</p></div>`;
+    return;
+  }
+
+  const winRateColor = res.winRate >= 50 ? 'var(--red, #c0392b)' : 'var(--green, #27ae60)';
+  const totalReturnColor = res.totalReturn >= 0 ? 'var(--red, #c0392b)' : 'var(--green, #27ae60)';
+
+  // 信号列表（最近 20 条）
+  const recentSignals = res.signals.slice(-20).reverse();
+  const signalRows = recentSignals.map(s => {
+    const isWin = s.profit !== undefined && s.profit > 0;
+    const actionColor = s.action === 'buy' ? 'var(--red, #c0392b)' : 'var(--green, #27ae60)';
+    return `
+      <tr>
+        <td>${s.date}</td>
+        <td style="color:${actionColor};font-weight:600">${s.action === 'buy' ? '买入' : '卖出'}</td>
+        <td class="tnum">${Number(s.price).toFixed(2)}</td>
+        ${s.profit !== undefined ? `<td class="tnum" style="color:${isWin ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)'}">${s.profit > 0 ? '+' : ''}${s.profit.toFixed(2)}%</td>` : '<td class="muted">—</td>'}
+      </tr>`;
+  }).join('');
+
+  div.innerHTML = `
+    <section class="card">
+      <h2>回测结果 · ${code}</h2>
+      <p class="muted">回测周期 ${days} 天 · 共 ${res.signals.length} 个信号</p>
+      <div class="bt-stats">
+        <div class="bt-stat">
+          <span class="bt-stat-label">胜率</span>
+          <span class="bt-stat-val tnum" style="color:${winRateColor}">${res.winRate.toFixed(1)}%</span>
+        </div>
+        <div class="bt-stat">
+          <span class="bt-stat-label">总收益</span>
+          <span class="bt-stat-val tnum" style="color:${totalReturnColor}">${res.totalReturn >= 0 ? '+' : ''}${res.totalReturn.toFixed(2)}%</span>
+        </div>
+        <div class="bt-stat">
+          <span class="bt-stat-label">最大回撤</span>
+          <span class="bt-stat-val tnum" style="color:var(--green,#27ae60)">${res.maxDrawdown.toFixed(2)}%</span>
+        </div>
+        <div class="bt-stat">
+          <span class="bt-stat-label">盈利次数</span>
+          <span class="bt-stat-val tnum">${res.wins} / ${res.signals.filter(s => s.action === 'sell').length}</span>
+        </div>
+      </div>
+    </section>
+    <section class="card">
+      <h3>交易信号明细（最近 20 条）</h3>
+      <div class="table-wrap">
+        <table class="bt-table">
+          <thead><tr><th>日期</th><th>操作</th><th>价格</th><th>收益</th></tr></thead>
+          <tbody>${signalRows}</tbody>
+        </table>
+      </div>
+    </section>
+    ${res.disclaimer ? `<p class="muted small center bt-disclaimer">${res.disclaimer}</p>` : ''}
+  `;
+}
 
 // --- 通用 Tooltip ---
 let _tipTimer = null;
@@ -948,11 +1095,32 @@ async function notesPage() {
   };
 }
 
+// --- 大盘指数栏 ---
+async function loadIndices() {
+  const bar = document.querySelector('#indices-bar');
+  if (!bar) return;
+  try {
+    const { indices } = await api('/indices');
+    if (!indices || !indices.length) { bar.style.display = 'none'; return; }
+    bar.innerHTML = indices.map(idx => {
+      const cls = idx.changePct > 0 ? 'up' : idx.changePct < 0 ? 'down' : '';
+      const arrow = idx.changePct > 0 ? '▲' : idx.changePct < 0 ? '▼' : '—';
+      return `<div class="idx-card ${cls}">
+        <span class="idx-name">${escape(idx.name)}</span>
+        <span class="idx-price">${number(idx.price)}</span>
+        <span class="idx-chg">${arrow} ${Math.abs(idx.changePct).toFixed(2)}%</span>
+      </div>`;
+    }).join('');
+  } catch { bar.style.display = 'none'; }
+}
+
 function router() {
   const path = location.hash.slice(2) || 'check';
   if (path.startsWith('check/')) { const code = path.split('/')[1]; checkPage(); setTimeout(() => { document.querySelector('#stock-input').value = code; api(`/stocks/${code}/report`).then(r => { const scanSlot = document.querySelector('#scan-slot'); if (scanSlot) playScanAnim(scanSlot, Promise.resolve({j:r}), {title:'个股体检中'}).then(({j}) => j && renderReport(j)); }).catch(e => notice(e.message)); }, 100); return; }
-  ({ check: checkPage, screen: screenPage, rules: rulesPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
+  ({ check: checkPage, screen: screenPage, backtest: backtestPage, rules: rulesPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
 }
+loadIndices();
+setInterval(loadIndices, 60000);
 router(); window.addEventListener('hashchange', router);
 
 // 导航栏点击：当 hash 相同时强制刷新页面（解决"已在体检页点导航回不去"问题）

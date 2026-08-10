@@ -158,14 +158,15 @@ function calcPosition(pos, price) {
 }
 
 // --- 报告引擎 ---
-function reportFrom(quoteData, candles) {
+function reportFrom(quoteData, candles, config = {}) {
+  const cfg = { macdFast: 6, macdSlow: 13, macdSignal: 5, volumeRatioThreshold: 1.5, healthScoreThreshold: 60, ma60Period: 60, ...config };
   const closes = candles.map(x => x.close), volumes = candles.map(x => x.volume), last = candles.at(-1);
-  const ma20 = average(closes, 20), ma60 = average(closes, 60), ma5 = average(closes, 5);
+  const ma20 = average(closes, 20), ma60 = average(closes, cfg.ma60Period), ma5 = average(closes, 5);
 
   // MA60 序列（用于图表叠加）
-  const ma60Series = closes.map((_, i) => i >= 59 ? average(closes.slice(0, i + 1), 60) : null);
+  const ma60Series = closes.map((_, i) => i >= cfg.ma60Period - 1 ? average(closes.slice(0, i + 1), cfg.ma60Period) : null);
 
-  const fast = ema(closes, 6), slow = ema(closes, 13), macd = fast.map((x, i) => x - slow[i]), signal = ema(macd, 5);
+  const fast = ema(closes, cfg.macdFast), slow = ema(closes, cfg.macdSlow), macd = fast.map((x, i) => x - slow[i]), signal = ema(macd, cfg.macdSignal);
   const diff = macd.at(-1), dea = signal.at(-1);
   const changes = closes.slice(-15).map((x, i, arr) => i ? x - arr[i - 1] : 0).slice(1);
   const gains = changes.map(x => Math.max(x, 0)), losses = changes.map(x => Math.max(-x, 0));
@@ -185,7 +186,7 @@ function reportFrom(quoteData, candles) {
   const murphy = murphyIndicators(candles);
 
   const bullish = last.close >= ma60, macdUp = diff >= dea, healthy = bullish && macdUp;
-  let score = 50 + (bullish ? 15 : -15) + (last.close >= ma20 ? 8 : -8) + (macdUp ? 9 : -9) + (quoteData.volumeRatio >= 1.5 ? 5 : 0) + (rsiValue > 70 ? -4 : rsiValue < 30 ? 2 : 0);
+  let score = 50 + (bullish ? 15 : -15) + (last.close >= ma20 ? 8 : -8) + (macdUp ? 9 : -9) + (quoteData.volumeRatio >= cfg.volumeRatioThreshold ? 5 : 0) + (rsiValue > 70 ? -4 : rsiValue < 30 ? 2 : 0);
 
   // 形态加分
   let patternPts = 0;
@@ -219,7 +220,7 @@ function reportFrom(quoteData, candles) {
     { key: 'ma60', name: '生命线 MA60', note: `${last.close >= ma60 ? '站上' : '跌破'} ${ma60.toFixed(2)}` },
     { key: 'support', name: '关键支撑', note: `${support.toFixed(2)} ${last.close >= support ? '暂未跌破' : '已跌破'}` },
     { key: 'ma5_ma20', name: 'MA5 / MA20', note: ma5 >= ma20 ? '短期均线偏多' : '短期均线偏空' },
-    { key: 'volume', name: '成交量 / 量价', note: `量比 ${quoteData.volumeRatio.toFixed(2)}（≥1.5 算放量）` },
+    { key: 'volume', name: '成交量 / 量价', note: `量比 ${quoteData.volumeRatio.toFixed(2)}（≥${cfg.volumeRatioThreshold} 算放量）` },
     { key: 'macd', name: 'MACD 金死叉', note: macdUp ? '金叉 · 多头占优' : '死叉 · 需谨慎' },
     { key: 'rsi', name: 'RSI / MACD 背离', note: `${rsiValue.toFixed(1)} · ${rsiValue > 70 ? '超买提醒' : rsiValue < 30 ? '超卖关注' : '无明显背离'}` },
     { key: 'polarity', name: '极性转换', note: last.close >= ma20 ? '无' : '均线下方，观察反压' },
@@ -234,7 +235,7 @@ function reportFrom(quoteData, candles) {
   factors.push({ dim: 'trend', pts: bullish ? 15 : -15, text: `${bullish ? '站上' : '跌破'} MA60 ${ma60.toFixed(2)}` });
   factors.push({ dim: 'ma5_ma20', pts: last.close >= ma20 ? 8 : -8, text: `收盘价 ${last.close.toFixed(2)} ${last.close >= ma20 ? '≥' : '<'} MA20 ${ma20.toFixed(2)}` });
   factors.push({ dim: 'macd', pts: macdUp ? 9 : -9, text: macdUp ? 'MACD 金叉' : 'MACD 死叉' });
-  if (quoteData.volumeRatio >= 1.5) factors.push({ dim: 'volume', pts: 5, text: `量比 ${quoteData.volumeRatio.toFixed(2)} 放量` });
+  if (quoteData.volumeRatio >= cfg.volumeRatioThreshold) factors.push({ dim: 'volume', pts: 5, text: `量比 ${quoteData.volumeRatio.toFixed(2)} 放量` });
   if (rsiValue > 70) factors.push({ dim: 'rsi', pts: -4, text: `RSI ${rsiValue.toFixed(1)} 超买` });
   else if (rsiValue < 30) factors.push({ dim: 'rsi', pts: 2, text: `RSI ${rsiValue.toFixed(1)} 超卖` });
   if (patternPts !== 0) factors.push({ dim: 'pattern', pts: patternPts, text: `蜡烛形态 ${patterns.length} 种命中` });
@@ -304,7 +305,9 @@ function reportFrom(quoteData, candles) {
 async function stockReport(code) {
   const normalized = String(code).replace(/\D/g, '').padStart(6, '0');
   const [q, k] = await Promise.all([quote(normalized), klines(normalized)]);
-  return reportFrom(q, k);
+  let cfg = {};
+  try { cfg = JSON.parse(await readFile(join(DATA_DIR, 'config.json'), 'utf8')); } catch {}
+  return reportFrom(q, k, cfg);
 }
 
 // --- 体检历史追踪（P0-3）---
