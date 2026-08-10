@@ -373,7 +373,7 @@ function renderReport(data) {
     <p class="signal ${data.light === 'green' ? 'positive' : data.light === 'red' ? 'negative' : ''}">● ${data.band}</p>
     <dl><dt>MA20</dt><dd>${number(data.metrics?.ma20)}</dd><dt>MA60</dt><dd>${number(data.metrics?.ma60)}</dd><dt>MACD</dt><dd>${number(data.metrics?.macd)}</dd><dt>RSI</dt><dd>${number(data.metrics?.rsi)}</dd></dl>
     <button id="favorite" class="primary full">收藏到自选</button></article></div>
-    <div class="scanhdr">🔬 体检共 <b>${(data.pat_scanned || 29) + 22}</b> 项 = <b>①${data.pat_scanned || 29} 种蜡烛形态</b>（下方「命中形态」列出命中的，没命中=没出现）＋ <b>②12 类技术维度</b>（10 类核心 + 墨菲摆动指标 7 项、经典图表形态两组汇总计分，下方逐项全列）。带分数=这次影响了评分，带「·」=查过、正常。</div>
+    <div class="scanhdr">🔬 体检共 <b>${(data.pat_scanned || 29) + 12}</b> 项 = <b>①${data.pat_scanned || 29} 种蜡烛形态</b>（下方「命中形态」列出命中的，没命中=没出现）＋ <b>②12 类技术维度</b>（趋势/均线/量价/动量 10 类核心 + 墨菲摆动指标组 + 经典图表形态，下方逐项全列）。带分数=这次影响了评分，带「·」=查过、正常。</div>
     ${card('', `<div class="seclbl">① 蜡烛形态 · 已扫 ${data.pat_scanned || 29} 种，命中 ${data.pat_hit || 0} 种 ${patScoreHtml}</div><div class="pats" style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 0 14px">${patternChips(data.patterns)}</div><div class="seclbl">② 技术维度 · 12 类（全部都扫了）</div>${data.scan_dims.map(d => {
     const desc = SCAN_DIM_DESC[d.key];
     const tt = desc ? `data-tooltip="${desc.meaning}" data-tooltip-signal="${desc.hint}"` : '';
