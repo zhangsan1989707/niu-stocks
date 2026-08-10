@@ -623,6 +623,215 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, trades: pf.trades.slice(-50).reverse() });
     }
 
+    // ===== P1: 大盘指数 =====
+    if (req.method === 'GET' && url.pathname === '/api/indices') {
+      const indices = [
+        { code: '000001', name: '上证指数', market: 'sh' },
+        { code: '399001', name: '深证成指', market: 'sz' },
+        { code: '399006', name: '创业板指', market: 'sz' },
+        { code: '000300', name: '沪深300', market: 'sh' },
+      ];
+      const cacheKey = cache.key('indices');
+      const cached = cache.get(cacheKey);
+      if (cached) { log('GET', url.pathname, 200, Date.now() - start); return json(res, 200, { ok: true, indices: cached, cached: true }); }
+      try {
+        const results = await batchRun(indices, async idx => {
+          try {
+            const text = await requestText(`https://qt.gtimg.cn/q=${idx.market}${idx.code}`, 'gbk');
+            const values = (text.match(/"([^"]*)"/) || [, ''])[1].split('~');
+            return { code: idx.code, name: idx.name, price: number(values[3]), changePct: number(values[32]), change: number(values[31]), source: '腾讯' };
+          } catch { return { code: idx.code, name: idx.name, price: 0, changePct: 0, source: 'error' }; }
+        }, 4);
+        const data = results.map(r => r.status === 'fulfilled' ? r.value : null).filter(Boolean);
+        cache.set(cacheKey, data);
+        log('GET', url.pathname, 200, Date.now() - start);
+        return json(res, 200, { ok: true, indices: data });
+      } catch (e) { log('GET', url.pathname, 502, Date.now() - start); return json(res, 502, { error: '指数获取失败' }); }
+    }
+
+    // ===== P1: 提醒系统 =====
+    if (url.pathname === '/api/alerts') {
+      const ALERTS_FILE = join(DATA_DIR, 'alerts.json');
+      async function loadAlerts() { try { return JSON.parse(await readFile(ALERTS_FILE, 'utf8')); } catch { return { rules: [], pending: [] }; } }
+      async function saveAlerts(a) { await writeFile(ALERTS_FILE, JSON.stringify(a, null, 2)); }
+      if (req.method === 'GET') {
+        const a = await loadAlerts();
+        log('GET', url.pathname, 200, Date.now() - start);
+        return json(res, 200, { ok: true, ...a });
+      }
+      if (req.method === 'POST') {
+        const { code, name, type, condition, value } = await body(req);
+        if (!code || !type) return json(res, 400, { error: '缺少必要参数' });
+        const a = await loadAlerts();
+        a.rules.push({ id: randomUUID(), code, name: name || code, type, condition: condition || '>=', value: Number(value) || 0, enabled: true, createdAt: new Date().toISOString() });
+        await saveAlerts(a);
+        log('POST', url.pathname, 201, Date.now() - start);
+        return json(res, 201, { ok: true });
+      }
+    }
+    if (req.method === 'DELETE' && /^\/api\/alerts\/[^/]+$/.test(url.pathname)) {
+      const ALERTS_FILE = join(DATA_DIR, 'alerts.json');
+      const id = url.pathname.split('/').at(-1);
+      let a; try { a = JSON.parse(await readFile(ALERTS_FILE, 'utf8')); } catch { a = { rules: [], pending: [] }; }
+      a.rules = a.rules.filter(r => r.id !== id);
+      a.pending = a.pending.filter(p => p.ruleId !== id);
+      await writeFile(ALERTS_FILE, JSON.stringify(a, null, 2));
+      log('DELETE', url.pathname, 200, Date.now() - start);
+      return json(res, 200, { ok: true });
+    }
+    // 拉取未读提醒
+    if (req.method === 'GET' && url.pathname === '/api/alerts/pending') {
+      const ALERTS_FILE = join(DATA_DIR, 'alerts.json');
+      let a; try { a = JSON.parse(await readFile(ALERTS_FILE, 'utf8')); } catch { a = { rules: [], pending: [] }; }
+      // 检查所有启用的规则
+      const codes = [...new Set(a.rules.filter(r => r.enabled).map(r => r.code))];
+      if (codes.length) {
+        const results = await batchRun(codes, async code => {
+          try { const q = await quote(code); return { code, price: q.price, changePct: q.changePct }; }
+          catch { return null; }
+        }, 3);
+        const priceMap = {};
+        results.forEach(r => { if (r.status === 'fulfilled' && r.value) priceMap[r.value.code] = r.value; });
+        for (const rule of a.rules.filter(r => r.enabled)) {
+          const p = priceMap[rule.code];
+          if (!p || !p.price) continue;
+          let triggered = false;
+          if (rule.type === 'price' && rule.condition === '>=') triggered = p.price >= rule.value;
+          else if (rule.type === 'price' && rule.condition === '<=') triggered = p.price <= rule.value;
+          else if (rule.type === 'pct' && rule.condition === '>=') triggered = p.changePct >= rule.value;
+          else if (rule.type === 'pct' && rule.condition === '<=') triggered = p.changePct <= rule.value;
+          if (triggered) {
+            const exists = a.pending.find(x => x.ruleId === rule.id && Date.now() - new Date(x.time).getTime() < 300000);
+            if (!exists) a.pending.push({ id: randomUUID(), ruleId: rule.id, code: rule.code, name: rule.name, type: rule.type, price: p.price, changePct: p.changePct, message: `${rule.name} ${rule.type === 'price' ? '价格' : '涨跌幅'} ${rule.condition} ${rule.value}（当前 ${rule.type === 'price' ? p.price.toFixed(2) : p.changePct.toFixed(2) + '%'}）`, time: new Date().toISOString(), read: false });
+          }
+        }
+        await writeFile(ALERTS_FILE, JSON.stringify(a, null, 2));
+      }
+      const unread = a.pending.filter(p => !p.read);
+      log('GET', url.pathname, 200, Date.now() - start);
+      return json(res, 200, { ok: true, pending: a.pending.slice(-20).reverse(), unreadCount: unread.length });
+    }
+    // 标记已读
+    if (req.method === 'PUT' && url.pathname === '/api/alerts/readall') {
+      const ALERTS_FILE = join(DATA_DIR, 'alerts.json');
+      let a; try { a = JSON.parse(await readFile(ALERTS_FILE, 'utf8')); } catch { a = { rules: [], pending: [] }; }
+      a.pending.forEach(p => p.read = true);
+      await writeFile(ALERTS_FILE, JSON.stringify(a, null, 2));
+      return json(res, 200, { ok: true });
+    }
+
+    // ===== P2: 决策笔记 =====
+    if (url.pathname === '/api/notes') {
+      const NOTES_DIR = join(DATA_DIR, 'notes');
+      async function loadNotes() { try { return JSON.parse(await readFile(join(NOTES_DIR, 'notes.json'), 'utf8')); } catch { return { notes: [] }; } }
+      async function saveNotes(n) { await mkdir(NOTES_DIR, { recursive: true }); await writeFile(join(NOTES_DIR, 'notes.json'), JSON.stringify(n, null, 2)); }
+      if (req.method === 'GET') {
+        const n = await loadNotes();
+        log('GET', url.pathname, 200, Date.now() - start);
+        return json(res, 200, { ok: true, notes: n.notes.slice(-50).reverse() });
+      }
+      if (req.method === 'POST') {
+        const { code, name, direction, reason, result, lesson } = await body(req);
+        if (!code || !direction) return json(res, 400, { error: '缺少代码或方向' });
+        const n = await loadNotes();
+        n.notes.push({ id: randomUUID(), code, name: name || code, direction, reason: String(reason || ''), result: String(result || ''), lesson: String(lesson || ''), createdAt: new Date().toISOString() });
+        await saveNotes(n);
+        log('POST', url.pathname, 201, Date.now() - start);
+        return json(res, 201, { ok: true });
+      }
+    }
+    if (req.method === 'DELETE' && /^\/api\/notes\/[^/]+$/.test(url.pathname)) {
+      const NOTES_DIR = join(DATA_DIR, 'notes');
+      const id = url.pathname.split('/').at(-1);
+      let n; try { n = JSON.parse(await readFile(join(NOTES_DIR, 'notes.json'), 'utf8')); } catch { n = { notes: [] }; }
+      n.notes = n.notes.filter(x => x.id !== id);
+      await writeFile(join(NOTES_DIR, 'notes.json'), JSON.stringify(n, null, 2));
+      return json(res, 200, { ok: true });
+    }
+
+    // ===== P3: 策略配置 =====
+    if (url.pathname === '/api/config') {
+      const CONFIG_FILE = join(DATA_DIR, 'config.json');
+      const defaultConfig = { macdFast: 6, macdSlow: 13, macdSignal: 5, volumeRatioThreshold: 1.5, healthScoreThreshold: 60, ma60Period: 60 };
+      if (req.method === 'GET') {
+        let cfg; try { cfg = JSON.parse(await readFile(CONFIG_FILE, 'utf8')); } catch { cfg = defaultConfig; }
+        return json(res, 200, { ok: true, config: { ...defaultConfig, ...cfg } });
+      }
+      if (req.method === 'PUT') {
+        const bodyData = await body(req);
+        let cfg; try { cfg = JSON.parse(await readFile(CONFIG_FILE, 'utf8')); } catch { cfg = defaultConfig; }
+        Object.assign(cfg, bodyData);
+        await writeFile(CONFIG_FILE, JSON.stringify(cfg, null, 2));
+        return json(res, 200, { ok: true, config: cfg });
+      }
+    }
+
+    // ===== P3: 板块热度 =====
+    if (req.method === 'GET' && url.pathname === '/api/sectors') {
+      const sectors = {};
+      STOCKS.forEach(([code, name]) => {
+        let sector = '其他';
+        const sectorMap = { '600519':'白酒','000858':'白酒','000568':'白酒','600809':'白酒','002304':'白酒','002594':'新能源','300750':'新能源','601012':'新能源','300274':'新能源','600438':'新能源','688981':'半导体','002371':'半导体','603501':'半导体','688012':'半导体','002475':'消费电子','601138':'消费电子','002241':'消费电子','600036':'金融','601318':'金融','600030':'金融','300059':'金融','000001':'金融','601166':'金融','600276':'医药','300760':'医药','603259':'医药','601127':'汽车','000625':'汽车','601633':'汽车','600392':'稀土资源','600111':'稀土资源','601899':'稀土资源','300308':'通信AI','000063':'通信AI','002230':'通信AI','603197':'军工制造','000021':'军工制造','600893':'军工制造','000002':'地产基建','600048':'地产基建','000333':'家电','000651':'家电','002415':'电子','603986':'电子','600887':'消费','601857':'能源','600028':'能源','601088':'能源' };
+        sector = sectorMap[code] || '其他';
+        if (!sectors[sector]) sectors[sector] = [];
+        sectors[sector].push(code);
+      });
+      const results = await batchRun(Object.entries(sectors), async ([sector, codes]) => {
+        const quotes = await batchRun(codes.slice(0, 5), async code => {
+          try { const q = await quote(code); return { code, changePct: q.changePct }; } catch { return null; }
+        }, 3);
+        const valid = quotes.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
+        const avgPct = valid.length ? valid.reduce((s, q) => s + q.changePct, 0) / valid.length : 0;
+        return { sector, count: codes.length, avgPct: Math.round(avgPct * 100) / 100, codes };
+      }, 3);
+      const data = results.map(r => r.status === 'fulfilled' ? r.value : null).filter(Boolean).sort((a, b) => b.avgPct - a.avgPct);
+      log('GET', url.pathname, 200, Date.now() - start);
+      return json(res, 200, { ok: true, sectors: data });
+    }
+
+    // ===== P3: 简化回测 =====
+    if (req.method === 'GET' && url.pathname === '/api/backtest') {
+      const code = url.searchParams.get('code') || '600519';
+      const days = Math.min(Number(url.searchParams.get('days')) || 120, 300);
+      try {
+        const k = await klines(code);
+        const slice = k.slice(-days);
+        let signals = 0, wins = 0, totalReturn = 0, maxDrawdown = 0;
+        let peak = -Infinity, entryPrice = null;
+        for (let i = 30; i < slice.length; i++) {
+          const candles = slice.slice(0, i + 1);
+          const closes = candles.map(c => c.close);
+          const ma60 = average(closes, Math.min(60, closes.length));
+          const ma20 = average(closes, 20);
+          const fast = ema(closes, 6), slow = ema(closes, 13);
+          const macd = fast.map((x, j) => x - slow[j]);
+          const signal = ema(macd, 5);
+          const isGolden = macd[macd.length - 1] >= signal[signal.length - 1];
+          const prevGolden = macd[macd.length - 2] < signal[signal.length - 2];
+          // 金叉买入信号
+          if (isGolden && prevGolden && candles[candles.length - 1].close >= ma60) {
+            signals++;
+            entryPrice = candles[candles.length - 1].close;
+          }
+          // 死叉卖出信号
+          if (!isGolden && !prevGolden && entryPrice) {
+            const exitPrice = candles[candles.length - 1].close;
+            const ret = (exitPrice - entryPrice) / entryPrice;
+            totalReturn += ret;
+            if (ret > 0) wins++;
+            entryPrice = null;
+          }
+          // 最大回撤
+          const cur = candles[candles.length - 1].close;
+          if (cur > peak) peak = cur;
+          const dd = (cur - peak) / peak;
+          if (dd < maxDrawdown) maxDrawdown = dd;
+        }
+        log('GET', url.pathname, 200, Date.now() - start);
+        return json(res, 200, { ok: true, code, days: slice.length, signals, wins, winRate: signals > 0 ? Math.round(wins / signals * 100) : 0, totalReturn: Math.round(totalReturn * 10000) / 100, maxDrawdown: Math.round(maxDrawdown * 10000) / 100, disclaimer: '简化回测存在幸存者偏差和前视偏差，仅供参考' });
+      } catch (e) { log('GET', url.pathname, 502, Date.now() - start); return json(res, 502, { error: '回测失败：' + e.message }); }
+    }
+
     if (req.method === 'GET') {
       const file = join(STATIC, route(url.pathname));
       if (!file.startsWith(STATIC)) return json(res, 403, { error: 'Forbidden' });

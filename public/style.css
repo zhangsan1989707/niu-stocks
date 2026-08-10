@@ -957,6 +957,40 @@ footer {
 
 
 
+
+/* ========== Indices Bar (指数栏) ========== */
+.indices-bar { display: flex; gap: 8px; margin: 0 0 14px; flex-wrap: wrap; }
+.idx-card { flex: 1; min-width: 140px; display: flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; box-shadow: var(--shadow-sm); }
+.idx-card.up { border-left: 3px solid var(--red); }
+.idx-card.down { border-left: 3px solid var(--good); }
+.idx-name { font-size: 12px; color: var(--muted); font-weight: 600; }
+.idx-price { font-size: 16px; font-weight: 800; font-family: var(--mono); }
+.idx-pct { font-size: 12px; font-weight: 700; margin-left: auto; }
+.idx-card.up .idx-pct { color: var(--red); }
+.idx-card.down .idx-pct { color: var(--good); }
+
+/* ========== Alert Items ========== */
+.alert-item { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line-soft); font-size: 13px; flex-wrap: wrap; }
+.alert-item.read { opacity: .5; }
+.alert-time { color: var(--faint); font-size: 12px; }
+.alert-price { font-family: var(--mono); font-weight: 700; margin-left: auto; }
+
+/* ========== Note Items ========== */
+.note-item { padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
+.note-reason, .note-result, .note-lesson { font-size: 13px; color: var(--muted); margin: 4px 0 0; line-height: 1.6; }
+.note-lesson { color: var(--amber); }
+
+/* ========== Sector Heatmap ========== */
+.sector-heatmap { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.sector-chip { display: flex; flex-direction: column; align-items: center; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); min-width: 70px; }
+.sector-name { font-size: 12px; color: var(--ink-soft); font-weight: 600; }
+.sector-pct { font-size: 16px; font-weight: 800; font-family: var(--mono); }
+.sector-chip small { font-size: 11px; color: var(--faint); }
+
+@media (max-width: 760px) {
+  .indices-bar { flex-direction: column; }
+  .idx-card { min-width: 0; }
+}
 /* ========== Favorite Groups (自选分组) ========== */
 .fav-groups { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 12px; }
 .fav-group-tab { border: 1px solid var(--line); background: var(--card); border-radius: 18px; padding: 5px 13px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .15s; }
