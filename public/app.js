@@ -273,7 +273,7 @@ function renderReport(data) {
     ${card('四方会诊', renderConsult(data.consult), 'report-card')}
     ${card('全部校验', `<p class="report-note">每次体检会对趋势、均线、量价与动量指标执行同一套规则。</p>${data.scan_dims.map(d => `<div class="check"><i>${d.note.includes('跌破') || d.note.includes('偏弱') || d.note.includes('死叉') || d.note.includes('超买') ? '·' : '✓'}</i><b>${escape(d.name)}</b><span>${escape(d.note)}</span></div>`).join('')}`, 'report-card')}
     <div id="favorites"></div>`);
-  document.querySelector('#back').onclick = checkPage;
+  document.querySelector('#back').onclick = () => { location.hash = '#/check'; checkPage(); };
   const chartEl = document.querySelector('#chart');
   if (chartEl) chartEl.innerHTML = drawChart(data.chart);
   document.querySelector('#favorite')?.addEventListener('click', async () => { try { await api('/favorites', { method:'POST', body:JSON.stringify({code:data.code,name:data.name}) }); notice('已加入自选', true); } catch (e) { notice(e.message); } });
@@ -387,3 +387,13 @@ function router() {
   ({ check: checkPage, screen: screenPage, rules: rulesPage, feedback: feedbackPage }[path] || checkPage)();
 }
 router(); window.addEventListener('hashchange', router);
+
+// 导航栏点击：当 hash 相同时强制刷新页面（解决"已在体检页点导航回不去"问题）
+document.querySelectorAll('header nav a, header .brand').forEach(a => {
+  a.addEventListener('click', () => {
+    const href = a.getAttribute('href') || '';
+    if (href.startsWith('#/') && location.hash === href) {
+      router(); // hash 没变，手动触发路由
+    }
+  });
+});
