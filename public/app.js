@@ -160,7 +160,7 @@ async function playScanAnim(host, fetchP, opts = {}) {
   }
 
   let j = null;
-  try { j = (await fetchP).j || (await fetchP); } catch (e) { j = null; }
+  try { const result = await fetchP; j = result.j || result; } catch (e) { j = null; }
   if (wait) wait.className = 'swait';
   if (!alive()) return { aborted: true };
   if (!j || !j.ok) return { j };
@@ -304,7 +304,7 @@ async function renderFavorites() {
       catch (e) { notice(e.message); b.disabled = false; b.textContent = '体检'; }
     });
     slot.querySelectorAll('.rmfav').forEach(b => b.onclick = async () => {
-      try { await fetch(`/api/favorites/${b.dataset.code}`, { method: 'DELETE' }); notice('已删除', true); renderFavorites(); }
+      try { await api(`/favorites/${b.dataset.code}`, { method: 'DELETE' }); notice('已删除', true); renderFavorites(); }
       catch (e) { notice(e.message); }
     });
     const testAllBtn = slot.querySelector('#testAllBtn');

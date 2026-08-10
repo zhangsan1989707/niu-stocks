@@ -34,12 +34,17 @@ function logFallback(code, from, to, reason) {
 }
 
 // --- DB ---
+let _dbCache = null, _dbCacheTime = 0;
 async function loadDb() {
+  // 1 秒内复用缓存，避免高频请求重复读文件
+  if (_dbCache && Date.now() - _dbCacheTime < 1000) return _dbCache;
   await mkdir(DATA_DIR, { recursive: true });
-  try { return JSON.parse(await readFile(DB_FILE, 'utf8')); }
-  catch { return { feedback: [], favorites: [] }; }
+  try { _dbCache = JSON.parse(await readFile(DB_FILE, 'utf8')); }
+  catch { _dbCache = { feedback: [], favorites: [] }; }
+  _dbCacheTime = Date.now();
+  return _dbCache;
 }
-async function saveDb(db) { await writeFile(DB_FILE, JSON.stringify(db, null, 2)); }
+async function saveDb(db) { _dbCache = db; _dbCacheTime = Date.now(); await writeFile(DB_FILE, JSON.stringify(db, null, 2)); }
 function json(res, status, data) { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); }
 function body(req) { return new Promise((resolve, reject) => { let raw = ''; req.on('data', chunk => raw += chunk); req.on('end', () => { try { resolve(raw ? JSON.parse(raw) : {}); } catch { reject(new Error('请求格式不正确')); } }); req.on('error', reject); }); }
 function market(code) { return code.startsWith('6') || code.startsWith('9') ? 'sh' : code.startsWith('8') ? 'bj' : 'sz'; }
@@ -327,7 +332,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/favreport') {
       const favCodes = db.favorites.map(f => f.code);
       if (!favCodes.length) { log('GET', url.pathname, 200, Date.now() - start); return json(res, 200, { ok: true, date: new Date().toISOString().slice(0, 10), items: [], changes: [] }); }
-      const today = new Date().toISOString().slice(0, 10);
+      const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
       const historyDir = join(DATA_DIR, 'fav-history');
       const historyFile = join(historyDir, `${today}.json`);
       let todayData = null;
@@ -338,9 +343,11 @@ const server = http.createServer(async (req, res) => {
         todayData = { date: today, items: results.filter(r => r.status === 'fulfilled').map(r => r.value) };
         try { await mkdir(historyDir, { recursive: true }); await writeFile(historyFile, JSON.stringify(todayData, null, 2)); } catch {}
       }
-      // 读昨日数据对比
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-      const yesterdayFile = join(historyDir, `${yesterday}.json`);
+      // 读昨日数据对比（用本地日期避免 UTC 跨日问题）
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 86400000);
+      const yDate = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+      const yesterdayFile = join(historyDir, `${yDate}.json`);
       let prevData = null;
       try { prevData = JSON.parse(await readFile(yesterdayFile, 'utf8')); } catch {}
       let changes = [];
@@ -424,5 +431,3 @@ const server = http.createServer(async (req, res) => {
 if (require.main === module) server.listen(PORT, () => console.log(`牛股体检站运行于 http://localhost:${PORT}`));
 
 module.exports = { reportFrom, market, detectPatterns, murphyIndicators, detectClassicPatterns };
-
-const { detectClassicPatterns: _dcp } = require('./lib/classic-patterns');
