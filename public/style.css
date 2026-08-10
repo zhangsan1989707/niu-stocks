@@ -518,6 +518,30 @@ dd { margin: 0; font-weight: 600; font-family: var(--mono); }
 
 .filters button:hover { border-color: var(--blue); color: var(--blue); }
 .filters .active { background: var(--blue); color: #fff; border-color: var(--blue); }
+/* Custom scan input */
+.custom-scan {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 0;
+  align-items: center;
+}
+.custom-scan input {
+  flex: 1;
+  height: 42px;
+  background: var(--card);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-xs);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  outline: 0;
+  transition: border-color .15s;
+}
+.custom-scan input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(79,108,174,.1); }
+.custom-scan input::placeholder { color: var(--faint); }
+.custom-scan .outline { flex-shrink: 0; }
+
 
 /* ========== Table ========== */
 table { border-collapse: collapse; width: 100%; font-size: 13px; }

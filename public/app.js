@@ -357,13 +357,34 @@ async function screenPage() {
   loading();
   try {
     const data = await api('/screen');
-    layout('回春法选股', `<div class="how"><b>📋 这份名单怎么用</b><p>每天按趋势、MACD、均线与量价规则扫描可用样本；候选仅供技术研究，不构成投资建议。</p></div>
-    <div class="filters"><input id="screen-filter" placeholder="🔍 输入代码/名称搜索"><button class="active">体检分</button></div>
-    ${card('', `<p class="report-note">🩺 候选按体检分排序，数据更新时间：${date(data.updatedAt)}</p><div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>今日</th><th>体检分</th><th>量比</th><th>结论</th><th>灯</th></tr></thead><tbody id="screen-rows"></tbody></table></div>`)}`);
+    layout('回春法选股', `<div class="how"><b>📋 这份名单怎么用</b><p>每天按趋势、MACD、均线与量价规则扫描预置股票池（覆盖白酒/新能源/半导体/消费电子/金融/医药/汽车/稀土/通信/军工/家电等板块龙头，约 40 只）；候选仅供技术研究，不构成投资建议。</p></div>
+    <div class="custom-scan"><input id="scan-custom-codes" placeholder="📝 自定义扫描：输入 6 位代码，逗号分隔，如 600519,002594,300750"><button id="scan-custom-btn" class="outline" style="white-space:nowrap">⚡ 扫描自定义列表</button><span id="custom-status" style="display:none;font-size:12px;color:var(--blue)"></span></div>
+    ${card('', `<div class="filters"><input id="screen-filter" placeholder="🔍 输入代码/名称搜索"><button class="active">体检分</button></div><p class="report-note">🩺 候选按体检分排序，数据更新时间：${date(data.updatedAt)}</p><div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>今日</th><th>体检分</th><th>量比</th><th>结论</th><th>灯</th></tr></thead><tbody id="screen-rows"></tbody></table></div>`)}`);
+    let candidates = data.candidates;
     const render = rows => document.querySelector('#screen-rows').innerHTML = rows.length ? rows.map((x, i) => `<tr data-code="${x.code}"><td>${i+1}</td><td>${x.code}</td><td><b>${escape(x.name)}</b></td><td>${number(x.price)}</td><td class="${x.changePct>=0?'up':'down'}">${x.changePct>=0?'+':''}${number(x.changePct)}%</td><td><strong class="score mini">${x.score}</strong></td><td>${number(x.volumeRatio)}</td><td>${x.status}</td><td>${x.light === 'green' ? '🟢' : x.light === 'yellow' ? '🟡' : '🔴'}</td></tr>`).join('') : '<tr><td colspan="9">当前没有符合筛选条件的候选。</td></tr>';
-    render(data.candidates);
-    document.querySelector('#screen-filter').oninput = e => render(data.candidates.filter(x => (x.code + x.name).includes(e.target.value.trim())));
+    render(candidates);
+    document.querySelector('#screen-filter').oninput = e => render(candidates.filter(x => (x.code + x.name).includes(e.target.value.trim())));
     document.querySelector('#screen-rows').onclick = e => { const row = e.target.closest('tr[data-code]'); if (row) location.hash = `#/check/${row.dataset.code}`; };
+    // 自定义扫描
+    const scanBtn = document.querySelector('#scan-custom-btn');
+    const scanInput = document.querySelector('#scan-custom-codes');
+    const scanStatus = document.querySelector('#custom-status');
+    scanBtn.onclick = async () => {
+      const codesStr = scanInput.value.trim();
+      if (!codesStr) return notice('请输入股票代码，用逗号分隔');
+      if (!/^[\d,]+$/.test(codesStr)) return notice('请输入纯数字代码，逗号分隔');
+      scanBtn.disabled = true; scanStatus.style.display = 'inline'; scanStatus.textContent = '扫描中…';
+      try {
+        const r = await api(`/screen/custom?codes=${encodeURIComponent(codesStr)}`);
+        if (!r.candidates.length) { notice('没有符合条件的候选'); scanBtn.disabled = false; scanStatus.style.display = 'none'; return; }
+        candidates = r.candidates;
+        render(candidates);
+        scanStatus.textContent = `✓ 扫描 ${r.count} 只，符合条件 ${candidates.length} 只`;
+        notice(`扫描完成：${candidates.length} 只符合回春法初筛`, true);
+      } catch (e) { notice(e.message); scanStatus.style.display = 'none'; }
+      finally { scanBtn.disabled = false; }
+    };
+    scanInput.onkeydown = e => { if (e.key === 'Enter') scanBtn.click(); };
   } catch (e) { checkPage(); notice(e.message); }
 }
 
