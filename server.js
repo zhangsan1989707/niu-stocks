@@ -47,6 +47,19 @@ function number(value) { const parsed = Number(value); return Number.isFinite(pa
 
 // --- 行情数据 ---
 async function requestText(url, encoding = 'utf-8') { const response = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 StockHealthStation/1.0' }, signal: AbortSignal.timeout(8000) }); if (!response.ok) throw new Error(`行情服务返回 ${response.status}`); return new TextDecoder(encoding).decode(await response.arrayBuffer()); }
+
+// --- 远程搜索（东方财富）---
+async function remoteSearch(q) {
+  try {
+    const url = `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(q)}&type=14&token=D43BF722C8E33BDC906FB84D85E326E8&count=8`;
+    const text = await requestText(url);
+    const data = JSON.parse(text);
+    if (!data.QuotationCodeTable?.Data) return [];
+    return data.QuotationCodeTable.Data
+      .filter(x => x.Code && x.Name && /^[036]\d{5}$/.test(x.Code))
+      .map(x => ({ code: x.Code, name: x.Name }));
+  } catch { return []; }
+}
 async function tencentQuote(code) {
   const text = await requestText(`https://qt.gtimg.cn/q=${market(code)}${code}`, 'gbk');
   const values = (text.match(/"([^"]*)"/) || [, ''])[1].split('~');
@@ -268,6 +281,14 @@ const server = http.createServer(async (req, res) => {
       const matches = STOCKS.filter(x => x[0].includes(q) || x[1].includes(q)).slice(0, 8).map(([code, name]) => ({ code, name }));
       if (/^\d{6}$/.test(q) && !matches.some(x => x.code === q)) {
         try { const current = await quote(q); matches.unshift({ code: q, name: current.name }); } catch {}
+      }
+      // 预置列表没匹配时，走远程搜索
+      if (matches.length < 3 && !/^\d{6}$/.test(q)) {
+        const remote = await remoteSearch(q);
+        for (const r of remote) {
+          if (!matches.some(x => x.code === r.code)) matches.push(r);
+          if (matches.length >= 8) break;
+        }
       }
       log('GET', url.pathname, 200, Date.now() - start);
       return json(res, 200, { stocks: matches });
