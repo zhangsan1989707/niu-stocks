@@ -284,7 +284,7 @@ p { margin: 8px 0; line-height: 1.7; text-wrap: pretty; }
 /* ========== Suggestions ========== */
 .suggestions {
   position: absolute;
-  z-index: 20;
+  z-index: 100;
   left: 0; right: 0;
   top: 56px;
   border: 1px solid var(--line);
