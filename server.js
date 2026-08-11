@@ -10,6 +10,7 @@ const { join, extname } = require('node:path');
 const { STATIC, MIME, json, body, route, log, logFallback, market, number } = require('./lib/server/utils');
 const { handleApi, evaluateAlerts } = require('./lib/server/routes');
 const { maybeRunDailyScreen } = require('./lib/server/screen-engine');
+const { runBackup } = require('./lib/server/backup');
 const { reportFrom, stockReport, stockReportWithHistory, calcPosition, runBacktest } = require('./lib/server/report');
 const { loadStocks, addStock, removeStock, getSector } = require('./lib/server/stocks');
 const { getIndices, quote, klines, remoteSearch, checkHistory } = require('./lib/server/market');
@@ -73,6 +74,19 @@ if (require.main === module) {
   const screenTick = () => maybeRunDailyScreen().catch(error => console.error('[smart-screen] 自动选股失败：', error.message));
   setTimeout(screenTick, 30000).unref();
   setInterval(screenTick, 300000).unref();
+  // 每日数据备份：每天 03:00（容器时区）打包 data/ 到 Volume 的 backups/
+  const backupTick = () => runBackup().catch(error => console.error('[backup] 自动备份失败：', error.message));
+  const scheduleBackup = () => {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(3, 5, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    const delay = next - now;
+    setTimeout(() => { backupTick(); scheduleBackup(); }, delay).unref();
+  };
+  scheduleBackup();
+  // 启动时也跑一次（新卷首次部署立即有备份）
+  setTimeout(backupTick, 60000).unref();
 }
 
 // 保持与原 server.js 完全一致的导出（测试兼容）
