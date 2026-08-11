@@ -692,10 +692,8 @@ async function loadConfig() {
 
 // --- 回测页面 ---
 async function backtestPage() {
-  const main = document.querySelector('main');
-  main.innerHTML = `
-    <section class="card">
-      <h2>策略回测</h2>
+  layout('策略回测', `
+    ${card('', `
       <p class="muted">基于 MACD 金叉/死叉信号模拟历史交易回测，包含交易费用、滑点与买入持有基准比较；不等同于体检分策略验证。</p>
       <div class="bt-form">
         <div class="bt-field">
@@ -713,9 +711,8 @@ async function backtestPage() {
         </div>
         <button class="bt-run" id="bt-run">开始回测</button>
       </div>
-    </section>
-    <div id="bt-result"></div>
-  `;
+    `)}
+    <div id="bt-result"></div>`);
 
   // 尝试填充当前选中股票
   const cur = document.querySelector('#stockSelect');
@@ -775,7 +772,7 @@ function renderBacktestResult(res, code, days) {
   div.innerHTML = `
     <section class="card">
       <h2>回测结果 · ${code}</h2>
-      <p class="muted">回测周期 ${days} 天 · 共 ${res.signalCount || res.signals.length} 个信号</p>
+      <p class="muted">回测周期 ${days} 天 · ${res.signalCount || 0} 次买入信号 / ${res.closedTrades || 0} 笔已平仓交易</p>
       <div class="bt-stats">
         <div class="bt-stat">
           <span class="bt-stat-label">胜率</span>
@@ -791,11 +788,11 @@ function renderBacktestResult(res, code, days) {
         </div>
         <div class="bt-stat">
           <span class="bt-stat-label">买入持有基准</span>
-          <span class="bt-stat-val tnum">${res.benchmarkReturn >= 0 ? '+' : ''}${res.benchmarkReturn.toFixed(2)}%</span>
+          <span class="bt-stat-val tnum">${res.benchmarkReturn == null ? '—' : `${res.benchmarkReturn >= 0 ? '+' : ''}${res.benchmarkReturn.toFixed(2)}%`}</span>
         </div>
         <div class="bt-stat">
           <span class="bt-stat-label">盈利次数</span>
-          <span class="bt-stat-val tnum">${res.wins} / ${res.signals.filter(s => s.action === 'sell').length}</span>
+          <span class="bt-stat-val tnum">${res.wins} / ${res.closedTrades || 0}</span>
         </div>
       </div>
     </section>
@@ -814,10 +811,8 @@ function renderBacktestResult(res, code, days) {
 
 // --- 体检分有效性验证页面 ---
 async function validatePage() {
-  const main = document.querySelector('main');
-  main.innerHTML = `
-    <section class="card">
-      <h2>体检分有效性验证</h2>
+  layout('体检分有效性验证', `
+    ${card('', `
       <p class="muted">将历史体检评分与后续实际涨跌对比，观察评分与未来表现的历史关联；样本不足时不作结论。</p>
       <div class="bt-form">
         <div class="bt-field">
@@ -831,9 +826,8 @@ async function validatePage() {
         </div>
         <button class="bt-run" id="val-run">开始验证</button>
       </div>
-    </section>
-    <div id="val-result"></div>
-  `;
+    `)}
+    <div id="val-result"></div>`);
 
   const runBtn = document.querySelector('#val-run');
   const resultDiv = document.querySelector('#val-result');
@@ -860,7 +854,8 @@ function renderValidateResult(res) {
   const div = document.querySelector('#val-result');
 
   if (!res.samples || res.samples === 0) {
-    div.innerHTML = `<div class="card"><p class="muted center">${res.message || '历史体检记录不足，无法验证。请多使用体检功能积累数据后再试。'}</p></div>`;
+    const progress = res.historyDays != null && res.minimumHistoryDays != null ? `<p class="muted center">当前已有 ${res.historyDays} 天记录；本周期至少需要 ${res.minimumHistoryDays} 天。</p>` : '';
+    div.innerHTML = `<div class="card"><p class="muted center">${res.message || '历史体检记录不足，无法验证。请多使用体检功能积累数据后再试。'}</p>${progress}</div>`;
     return;
   }
 

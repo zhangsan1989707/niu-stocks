@@ -38,11 +38,11 @@ const server = http.createServer(async (req, res) => {
       if (!file.startsWith(STATIC)) return json(res, 403, { error: 'Forbidden' });
       try {
         const content = await readFile(file);
-        res.writeHead(200, { 'content-type': MIME[extname(file)] || 'application/octet-stream' });
+        res.writeHead(200, { 'content-type': MIME[extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
         return res.end(content);
       } catch {
         const html = await readFile(join(STATIC, 'index.html'));
-        res.writeHead(200, { 'content-type': MIME['.html'] });
+        res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-cache' });
         return res.end(html);
       }
     }
