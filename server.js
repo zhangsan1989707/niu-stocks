@@ -9,6 +9,7 @@ const { join, extname } = require('node:path');
 
 const { STATIC, MIME, json, body, route, log, logFallback, market, number } = require('./lib/server/utils');
 const { handleApi, evaluateAlerts } = require('./lib/server/routes');
+const { maybeRunDailyScreen } = require('./lib/server/screen-engine');
 const { reportFrom, stockReport, stockReportWithHistory, calcPosition, runBacktest } = require('./lib/server/report');
 const { loadStocks, addStock, removeStock, getSector } = require('./lib/server/stocks');
 const { getIndices, quote, klines, remoteSearch, checkHistory } = require('./lib/server/market');
@@ -68,6 +69,10 @@ const server = http.createServer(async (req, res) => {
 if (require.main === module) {
   server.listen(PORT, '127.0.0.1', () => console.log(`牛股体检站运行于 http://localhost:${PORT}`));
   setInterval(() => evaluateAlerts().catch(error => console.error('提醒检查失败：', error.message)), 60000).unref();
+  // 每日自动选股：交易日 15:35 后自动跑一次（引擎内部幂等判断）
+  const screenTick = () => maybeRunDailyScreen().catch(error => console.error('[smart-screen] 自动选股失败：', error.message));
+  setTimeout(screenTick, 30000).unref();
+  setInterval(screenTick, 300000).unref();
 }
 
 // 保持与原 server.js 完全一致的导出（测试兼容）

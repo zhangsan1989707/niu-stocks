@@ -575,6 +575,99 @@ async function screenPage() {
   } catch (e) { checkPage(); notice(e.message); }
 }
 
+// --- 智能选股（v2：全市场三层漏斗） ---
+const SMART_SIGNAL_NAMES = { trend: '趋势动量', rps: 'RPS强度', breakout: '20日突破', volcross: '量价金叉', pattern: '形态共振' };
+
+function smartSignalTip(signals) {
+  return (signals || []).map(s => `${s.name} ${s.conf >= 0 ? '+' : ''}${s.conf}：${s.note}`).join('\n');
+}
+
+function smartValidateCard(v) {
+  if (!v || !v.ok) return card('📈 前向收益回验', '<p class="report-note">回验数据暂不可用</p>');
+  if (!v.horizons || !v.horizons.length) return card('📈 前向收益回验', `<p class="report-note">${escape(v.message || '暂无历史选股记录')}</p>`);
+  const rows = v.horizons.map(h => {
+    const excess = h.excess == null ? '—' : `${h.excess >= 0 ? '+' : ''}${h.excess}%`;
+    const cls = h.excess == null ? '' : h.excess >= 0 ? 'up' : 'down';
+    return `<tr><td>持有 ${h.h} 日（T+${h.h}）</td><td>${h.samples}</td><td>${h.avgReturn == null ? '—' : h.avgReturn + '%'}</td><td>${h.winRate == null ? '—' : h.winRate + '%'}</td><td>${h.benchReturn == null ? '—' : h.benchReturn + '%'}</td><td class="${cls}"><b>${excess}</b></td></tr>`;
+  }).join('');
+  return card('📈 前向收益回验（事后统计）', `<p class="report-note">买入口径：${escape(v.buyRule)}；基准：${escape(v.benchmark)}。${escape(v.reliabilityNote)}</p>
+  <div class="table-wrap"><table><thead><tr><th>周期</th><th>样本</th><th>平均收益</th><th>胜率</th><th>基准收益</th><th>超额收益</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <p style="color:var(--muted);font-size:12.5px;margin-top:8px">⚠️ ${escape(v.disclaimer)}</p>`);
+}
+
+function renderSmartPage(data) {
+  const f = data.funnel;
+  const rejChips = Object.entries(data.rejected || {}).map(([reason, count]) => `<span class="patchip neu" style="margin:2px">${escape(reason)} ${count}</span>`).join('');
+  const funnel = `<div class="steps" style="grid-template-columns:repeat(5,1fr)"><article><b>1</b><h2>全市场</h2><p>${f.universe} 只</p></article><article><b>2</b><h2>硬过滤</h2><p>剩 ${f.hardFilterPassed} 只</p></article><article><b>3</b><h2>RPS候选</h2><p>${f.rpsCandidates} 只</p></article><article><b>4</b><h2>K线精析</h2><p>${f.analyzed} 只${f.skipped ? `（跳过 ${f.skipped}）` : ''}</p></article><article><b>5</b><h2>TopK</h2><p>入选 ${data.top.length} 只${f.vetoed ? `（否决 ${f.vetoed}）` : ''}</p></article></div>`;
+
+  const weightText = Object.entries(data.weights || {}).map(([k, w]) => `${SMART_SIGNAL_NAMES[k] || k} ${Math.round(w * 100)}%`).join(' · ');
+  const topRows = data.top.map(t => `<tr data-code="${t.code}" title="${escape(smartSignalTip(t.signals))}">
+    <td>${t.rank}</td><td>${t.code}</td><td><b>${escape(t.name)}</b></td>
+    <td>${number(t.price)}</td>
+    <td class="${t.changePct >= 0 ? 'up' : 'down'}">${t.changePct >= 0 ? '+' : ''}${number(t.changePct)}%</td>
+    <td><strong class="score mini">${t.score}</strong></td>
+    <td>${t.health}</td>
+    <td>${t.rps60 ?? '—'}</td><td>${t.rps120 ?? '—'}</td>
+    <td class="${t.ret120 >= 0 ? 'up' : 'down'}">${t.ret120 >= 0 ? '+' : ''}${number(t.ret120)}%</td>
+    <td>${number(t.amountYi)}</td><td>${number(t.volumeRatio)}</td>
+    <td>${t.light === 'green' ? '🟢' : t.light === 'yellow' ? '🟡' : '🔴'}</td>
+  </tr>`).join('');
+  const topTable = data.top.length ? `<p class="report-note">🖱️ 悬停行可看五路信号明细，点击行进入个股体检。入选分 50 为中性，越高越强。</p>
+  <div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>今日</th><th>入选分</th><th>体检分</th><th>RPS60</th><th>RPS120</th><th>120日</th><th>成交(亿)</th><th>量比</th><th>灯</th></tr></thead><tbody>${topRows}</tbody></table></div>` : '<p class="report-note">今日没有通过全部筛选与风险否决的股票。</p>';
+
+  const vetoRows = data.vetoed.length ? data.vetoed.map(v => `<tr data-code="${v.code}"><td>${v.code}</td><td>${escape(v.name)}</td><td><strong class="score mini">${v.score}</strong></td><td style="color:var(--muted)">${v.vetoes.map(escape).join('；')}</td></tr>`).join('') : '<tr><td colspan="4">今日没有被风险否决的高分股</td></tr>';
+
+  layout('智能选股', `
+    <div class="how"><b>🧭 方法说明</b><p>全市场三层漏斗：<b>硬过滤</b>（停牌/ST/次新/流动性/过热，不参与打分）→ <b>RPS 相对强度候选</b>（全市场 60 日涨幅百分位）→ <b>K线精析五路信号加权投票</b>（${weightText}），破位与深度回撤由风险层一票否决。每个交易日 15:35 后自动运行并存档，作为前向回验的数据基础。数据日期：${data.date}${data.cached ? '（今日已跑过，读取存档）' : ''}</p></div>
+    ${card('', funnel)}
+    ${rejChips ? card('硬过滤淘汰明细', `<div>${rejChips}</div>`) : ''}
+    ${card(`🏆 今日 TopK 入选（${data.top.length} 只）`, topTable)}
+    ${card(`🚫 风险否决（${data.vetoed.length} 只，不参与入选）`, `<div class="table-wrap"><table><thead><tr><th>代码</th><th>名称</th><th>入选分</th><th>否决原因</th></tr></thead><tbody>${vetoRows}</tbody></table></div>`)}
+    <div id="smart-validate-slot">${card('📈 前向收益回验', '<p class="report-note">正在计算历史名单的前向收益…</p>')}</div>
+    <div id="smart-history-slot"></div>
+    <div class="form-actions"><button class="primary" id="smart-rerun">🔄 强制重新运行（忽略今日存档）</button><span id="smart-status" style="font-size:12.5px;color:var(--muted)"></span></div>
+    <p style="color:var(--muted);font-size:12.5px">⚠️ ${escape(data.disclaimer)}</p>`, '扫描全市场约 5500 只股票，多策略加权投票选出强势候选');
+
+  api('/screen/v2/validate')
+    .then(v => { const slot = document.querySelector('#smart-validate-slot'); if (slot) slot.innerHTML = smartValidateCard(v); })
+    .catch(() => { const slot = document.querySelector('#smart-validate-slot'); if (slot) slot.innerHTML = smartValidateCard(null); });
+  api('/screen/v2/history')
+    .then(({ history }) => {
+      const slot = document.querySelector('#smart-history-slot');
+      if (!slot || !history || !history.length) return;
+      slot.innerHTML = card(`🗂️ 历史选股存档（${history.length} 天）`, `<div>${history.map(h => `<span class="patchip neu" style="margin:2px" title="${h.names.map(escape).join('、')}">${h.date} · ${h.count}只</span>`).join('')}</div><p style="color:var(--muted);font-size:12.5px;margin-top:8px">存档越多，前向回验越可靠（30 个样本起才有参考意义）。</p>`);
+    })
+    .catch(() => {});
+
+  const rerunBtn = document.querySelector('#smart-rerun');
+  const status = document.querySelector('#smart-status');
+  rerunBtn.onclick = async () => {
+    rerunBtn.disabled = true;
+    status.textContent = '正在重新扫描全市场，约需 30-60 秒…';
+    try {
+      const fresh = await api('/screen/v2?force=1');
+      notice(`重新选股完成：Top${fresh.top.length}`, true);
+      renderSmartPage(fresh);
+    } catch (e) { notice(e.message); rerunBtn.disabled = false; status.textContent = ''; }
+  };
+
+  // 行点击跳个股体检（只作用于本页）
+  const pageEl = app.querySelector('.page');
+  if (pageEl) pageEl.onclick = e => {
+    if (e.target.closest('button')) return;
+    const row = e.target.closest('tr[data-code]');
+    if (row) location.hash = `#/check/${row.dataset.code}`;
+  };
+}
+
+async function smartPage() {
+  app.innerHTML = '<section class="page"><div class="loading">🔭 正在扫描全市场（约 5500 只）——首次运行约需 30-60 秒，请稍候…</div></section>';
+  let data;
+  try { data = await api('/screen/v2'); }
+  catch (e) { checkPage(); return notice(e.message); }
+  renderSmartPage(data);
+}
+
 function rulesPage() {
   layout('方法说明', `<p class="intro">不是玄学。挑票用「回春法」，判断技术风险用《日本蜡烛图技术》(尼森) ＋ 《金融市场技术分析》(墨菲) 双书驱动的个股体检，纯规则计算、标准全公开。</p>
     <div class="steps"><article><b>1</b><h2>挑票</h2><p>回春法选出候选</p></article><article><b>2</b><h2>判断</h2><p>个股体检能不能买</p></article></div>
@@ -674,16 +767,28 @@ async function loadConfig() {
       { key: 'volumeRatioThreshold', label: '放量量比阈值', hint: '默认 1.5' },
       { key: 'healthScoreThreshold', label: '健康分门槛', hint: '默认 60，选股筛选用' },
       { key: 'ma60Period', label: '生命线周期', hint: '默认 60' },
+      { key: 'screenMinAmountYi', label: '智能选股·成交额门槛（亿）', hint: '默认 1 亿，流动性过滤' },
+      { key: 'screenRpsMin', label: '智能选股·RPS 门槛', hint: '默认 85，60日强度百分位' },
+      { key: 'screenMaxCandidates', label: '智能选股·精析候选上限', hint: '默认 150 只' },
+      { key: 'screenTopK', label: '智能选股·TopK 入选数', hint: '默认 10 只' },
+      { key: 'screenMinListDays', label: '智能选股·最少上市天数', hint: '默认 60，剔除次新' },
+      { key: 'screenMaxChg60d', label: '智能选股·60日涨幅上限%', hint: '默认 120，剔除过热' },
     ];
-    panel.innerHTML = card('策略参数配置', `<p class="summary">修改体检引擎的技术参数。改完后新体检会立即生效，已出的体检结果不会变。</p>
-    <div class="config-grid">${fields.map(f => `<label class="cfg-item"><span class="cfg-label">${f.label}</span><input type="number" step="any" data-key="${f.key}" value="${config[f.key] ?? ''}" class="cfg-input"><span class="cfg-hint">${f.hint}</span></label>`).join('')}</div>
+    const cfgValue = key => key === 'screenMinAmountYi' ? (config.screenMinAmount / 1e8) : config[key];
+    panel.innerHTML = card('策略参数配置', `<p class="summary">修改体检引擎与智能选股的技术参数。改完后新体检/新选股会立即生效，已出的结果不会变。</p>
+    <div class="config-grid">${fields.map(f => `<label class="cfg-item"><span class="cfg-label">${f.label}</span><input type="number" step="any" data-key="${f.key}" value="${cfgValue(f.key) ?? ''}" class="cfg-input"><span class="cfg-hint">${f.hint}</span></label>`).join('')}</div>
     <div class="form-actions"><span id="cfg-status"></span><button class="primary" id="cfg-save">保存配置</button></div>`);
     document.querySelector('#cfg-save').onclick = async () => {
       const data = {};
-      panel.querySelectorAll('.cfg-input').forEach(inp => { const v = Number(inp.value); if (Number.isFinite(v)) data[inp.dataset.key] = v; });
+      panel.querySelectorAll('.cfg-input').forEach(inp => {
+        const v = Number(inp.value);
+        if (!Number.isFinite(v)) return;
+        if (inp.dataset.key === 'screenMinAmountYi') data.screenMinAmount = Math.round(v * 1e8);
+        else data[inp.dataset.key] = v;
+      });
       try {
         const { config: saved } = await api('/config', { method: 'PUT', body: JSON.stringify(data) });
-        panel.querySelectorAll('.cfg-input').forEach(inp => inp.value = saved[inp.dataset.key]);
+        panel.querySelectorAll('.cfg-input').forEach(inp => inp.value = inp.dataset.key === 'screenMinAmountYi' ? (saved.screenMinAmount / 1e8) : saved[inp.dataset.key]);
         notice('配置已保存，新体检将使用新参数', true);
       } catch (e) { notice(e.message); }
     };
@@ -1316,7 +1421,7 @@ async function loadIndices() {
 function router() {
   const path = location.hash.slice(2) || 'check';
   if (path.startsWith('check/')) { const code = path.split('/')[1]; checkPage(); setTimeout(() => { document.querySelector('#stock-input').value = code; api(`/stocks/${code}/report`).then(r => { const scanSlot = document.querySelector('#scan-slot'); if (scanSlot) playScanAnim(scanSlot, Promise.resolve({j:r}), {title:'个股体检中'}).then(({j}) => j && renderReport(j)); }).catch(e => notice(e.message)); }, 100); return; }
-  ({ check: checkPage, screen: screenPage, backtest: backtestPage, validate: validatePage, rules: rulesPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
+  ({ check: checkPage, screen: screenPage, smart: smartPage, backtest: backtestPage, validate: validatePage, rules: rulesPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
 }
 loadIndices();
 setInterval(loadIndices, 60000);
