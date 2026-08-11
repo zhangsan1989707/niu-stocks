@@ -691,125 +691,36 @@ async function loadConfig() {
 
 // --- 回测页面 ---
 async function backtestPage() {
-  const main = document.querySelector('main');
-  main.innerHTML = `
-    <section class="card">
-      <h2>策略回测</h2>
-      <p class="muted">基于 MACD 金叉/死叉信号模拟历史交易回测，评估策略在特定股票上的表现。结果仅供参考，不构成投资建议。</p>
-      <div class="bt-form">
-        <div class="bt-field">
-          <label class="cfg-label" for="bt-code">股票代码</label>
-          <input class="cfg-input" id="bt-code" type="text" placeholder="如 600519" maxlength="6" value="">
-        </div>
-        <div class="bt-field">
-          <label class="cfg-label" for="bt-days">回测天数</label>
-          <select class="cfg-input" id="bt-days">
-            <option value="60">60 天</option>
-            <option value="120" selected>120 天</option>
-            <option value="180">180 天</option>
-            <option value="250">250 天（约一年）</option>
-          </select>
-        </div>
-        <button class="bt-run" id="bt-run">开始回测</button>
-      </div>
-    </section>
-    <div id="bt-result"></div>
-  `;
-
-  // 尝试填充当前选中股票
-  const cur = document.querySelector('#stockSelect');
-  if (cur && cur.value) {
-    const inp = document.querySelector('#bt-code');
-    if (inp) inp.value = cur.value;
-  }
-
+  layout('策略回测', `<p class="intro">基于 MACD 金叉/死叉信号模拟历史交易回测，评估策略在特定股票上的表现。结果仅供参考，不构成投资建议。</p>
+    ${card('回测参数', `<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap"><div style="flex:1;min-width:140px"><label style="display:block;font-size:13px;color:var(--muted);margin-bottom:4px">股票代码</label><input id="bt-code" style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-size:14px;outline:0" placeholder="如 600519" maxlength="6"></div><div style="flex:1;min-width:140px"><label style="display:block;font-size:13px;color:var(--muted);margin-bottom:4px">回测天数</label><select id="bt-days" style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-size:14px;outline:0;background:var(--card)"><option value="60">60 天</option><option value="120" selected>120 天</option><option value="180">180 天</option><option value="250">250 天（约一年）</option></select></div><button class="primary" id="bt-run" style="height:42px">开始回测</button></div>`)}
+    <div id="bt-result"></div>`);
   const runBtn = document.querySelector('#bt-run');
   const resultDiv = document.querySelector('#bt-result');
-
   runBtn.onclick = async () => {
     const code = document.querySelector('#bt-code').value.trim();
     const days = document.querySelector('#bt-days').value;
     if (!/^\d{6}$/.test(code)) { notice('请输入 6 位股票代码'); return; }
-
-    runBtn.disabled = true;
-    runBtn.textContent = '回测中…';
-    resultDiv.innerHTML = '<div class="card"><p class="muted center">正在计算回测数据…</p></div>';
-
+    runBtn.disabled = true; runBtn.textContent = '回测中…';
+    resultDiv.innerHTML = '<div class="loading" style="margin:40px auto">计算回测数据…</div>';
     try {
-      const res = await api(`/backtest?code=${code}&days=${days}`);
-      renderBacktestResult(res, code, days);
-    } catch (e) {
-      resultDiv.innerHTML = `<div class="card"><p class="error">回测失败：${e.message}</p></div>`;
-    } finally {
-      runBtn.disabled = false;
-      runBtn.textContent = '开始回测';
-    }
+      const res = await api(`/backtest?code=${encoencodeURIComponent(code)}&days=${days}`);
+      if (!res.ok || res.signals === 0) {
+        resultDiv.innerHTML = card('回测结果', '<p class="empty">未产生任何交易信号。</p>');
+      } else {
+        const wr = res.winRate >= 50 ? 'var(--red)' : 'var(--good)';
+        const tr = res.totalReturn >= 0 ? 'var(--red)' : 'var(--good)';
+        resultDiv.innerHTML = card('回测结果 · ' + escape(code), `<p class="report-note">回测周期 ${res.days} 天 · 共 ${res.signals} 个信号</p>
+          <div class="port-summary" style="margin:10px 0"><div class="ps-card"><div class="ps-label">胜率</div><div class="ps-value" style="color:${wr}">${res.winRate}%</div></div><div class="ps-card"><div class="ps-label">总收益</div><div class="ps-value" style="color:${tr}">${res.totalReturn >= 0 ? '+' : ''}${res.totalReturn}%</div></div><div class="ps-card"><div class="ps-label">最大回撤</div><div class="ps-value" style="color:var(--green)">${res.maxDrawdown}%</div></div><div class="ps-card"><div class="ps-label">获胜次数</div><div class="ps-value">${res.wins}/${res.signals}</div></div></div>
+          ${res.disclaimer ? '<p class="report-note" style="color:var(--amber)">' + escape(res.disclaimer) + '</p>' : ''}`);
+      }
+    } catch (e) { resultDiv.innerHTML = card('回测失败', '<p class="empty">' + escape(e.message) + '</p>'); }
+    finally { runBtn.disabled = false; runBtn.textContent = '开始回测'; }
   };
-}
-
-function renderBacktestResult(res, code, days) {
-  const div = document.querySelector('#bt-result');
-  if (!res.ok || !res.signals || res.signals.length === 0) {
-    div.innerHTML = `<div class="card"><p class="muted center">未产生任何交易信号，可能数据不足或该时间段内无金叉/死叉。</p></div>`;
-    return;
-  }
-
-  const winRateColor = res.winRate >= 50 ? 'var(--red, #c0392b)' : 'var(--green, #27ae60)';
-  const totalReturnColor = res.totalReturn >= 0 ? 'var(--red, #c0392b)' : 'var(--green, #27ae60)';
-
-  // 信号列表（最近 20 条）
-  const recentSignals = res.signals.slice(-20).reverse();
-  const signalRows = recentSignals.map(s => {
-    const isWin = s.profit !== undefined && s.profit > 0;
-    const actionColor = s.action === 'buy' ? 'var(--red, #c0392b)' : 'var(--green, #27ae60)';
-    return `
-      <tr>
-        <td>${s.date}</td>
-        <td style="color:${actionColor};font-weight:600">${s.action === 'buy' ? '买入' : '卖出'}</td>
-        <td class="tnum">${Number(s.price).toFixed(2)}</td>
-        ${s.profit !== undefined ? `<td class="tnum" style="color:${isWin ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)'}">${s.profit > 0 ? '+' : ''}${s.profit.toFixed(2)}%</td>` : '<td class="muted">—</td>'}
-      </tr>`;
-  }).join('');
-
-  div.innerHTML = `
-    <section class="card">
-      <h2>回测结果 · ${code}</h2>
-      <p class="muted">回测周期 ${days} 天 · 共 ${res.signalCount || res.signals.length} 个信号</p>
-      <div class="bt-stats">
-        <div class="bt-stat">
-          <span class="bt-stat-label">胜率</span>
-          <span class="bt-stat-val tnum" style="color:${winRateColor}">${res.winRate.toFixed(1)}%</span>
-        </div>
-        <div class="bt-stat">
-          <span class="bt-stat-label">总收益</span>
-          <span class="bt-stat-val tnum" style="color:${totalReturnColor}">${res.totalReturn >= 0 ? '+' : ''}${res.totalReturn.toFixed(2)}%</span>
-        </div>
-        <div class="bt-stat">
-          <span class="bt-stat-label">最大回撤</span>
-          <span class="bt-stat-val tnum" style="color:var(--green,#27ae60)">${res.maxDrawdown.toFixed(2)}%</span>
-        </div>
-        <div class="bt-stat">
-          <span class="bt-stat-label">盈利次数</span>
-          <span class="bt-stat-val tnum">${res.wins} / ${res.signals.filter(s => s.action === 'sell').length}</span>
-        </div>
-      </div>
-    </section>
-    <section class="card">
-      <h3>交易信号明细（最近 20 条）</h3>
-      <div class="table-wrap">
-        <table class="bt-table">
-          <thead><tr><th>日期</th><th>操作</th><th>价格</th><th>收益</th></tr></thead>
-          <tbody>${signalRows}</tbody>
-        </table>
-      </div>
-    </section>
-    ${res.disclaimer ? `<p class="muted small center bt-disclaimer">${res.disclaimer}</p>` : ''}
-  `;
 }
 
 // --- 体检分有效性验证页面 ---
 async function validatePage() {
-  layout('体检分验证', `<p class="intro">将历史体检评分与后续实际涨跌对比，验证体检分的预测能力。按绿灯 / 黄灯 / 红灯分组统计。</p>
+  layout('体检分验证', `<p class="intro">验证体检分的预测区分能力，按绿灯/黄灯/红灯分组统计后续实际涨跌。</p>
     ${card('验证参数', `<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap"><div style="flex:1;min-width:140px"><label style="display:block;font-size:13px;color:var(--muted);margin-bottom:4px">预测周期</label><select id="val-days" style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-size:14px;outline:0;background:var(--card)"><option value="3">3 天</option><option value="5" selected>5 天</option><option value="10">10 天</option><option value="20">20 天</option></select></div><button class="primary" id="val-run" style="height:42px">开始验证</button></div>`)}
     <div id="val-result"></div>`);
   const runBtn = document.querySelector('#val-run');
@@ -821,22 +732,331 @@ async function validatePage() {
     try {
       const res = await api(`/validate?days=${days}`);
       if (!res.ok) { resultDiv.innerHTML = card('验证失败', '<p class="empty">' + escape(res.error || '数据不足') + '</p>'); runBtn.disabled = false; runBtn.textContent = '开始验证'; return; }
-      const greenWin = res.green ? (100 - (res.green.avgPct || 0)).toFixed(1) : '—';
-      const yellowWin = res.yellow ? (100 - (res.yellow.avgPct || 0)).toFixed(1) : '—';
-      const redWin = res.red ? (100 - (res.red.avgPct || 0)).toFixed(1) : '—';
       resultDiv.innerHTML = card('验证结果 · ' + days + '天预测周期', `
         <div class="port-summary">
-          <div class="ps-card"><div class="ps-label">🟢 绿灯</div><div class="ps-value" style="color:var(--good)">${res.green ? res.green.avgPct?.toFixed(2) + '%' : '—'}</div><div class="ps-sub">平均涨幅</div></div>
-          <div class="ps-card"><div class="ps-label">🟡 黄灯</div><div class="ps-value" style="color:var(--amber)">${res.yellow ? res.yellow.avgPct?.toFixed(2) + '%' : '—'}</div><div class="ps-sub">平均涨跌</div></div>
-          <div class="ps-card"><div class="ps-label">🔴 红灯</div><div class="ps-value" style="color:var(--red)">${res.red ? res.red.avgPct?.toFixed(2) + '%' : '—'}</div><div class="ps-sub">平均涨幅</div></div>
-          <div class="ps-card"><div class="ps-label">样本数</div><div class="ps-value">${(res.green?.count || 0) + (res.yellow?.count || 0) + (res.red?.count || 0)}</div><div class="ps-sub">历史体检记录</div></div>
+          <div class="ps-card"><div class="ps-label">绿灯</div><div class="ps-value" style="color:var(--good)">${res.green ? res.green.avgPct?.toFixed(2) + '%' : '—'}</div></div>
+          <div class="ps-card"><div class="ps-label">黄灯</div><div class="ps-value" style="color:var(--amber)">${res.yellow ? res.yellow.avgPct?.toFixed(2) + '%' : '—'}</div></div>
+          <div class="ps-card"><div class="ps-label">红灯</div><div class="ps-value" style="color:var(--red)">${res.red ? res.red.avgPct?.toFixed(2) + '%' : '—'}</div></div>
+          <div class="ps-card"><div class="ps-label">样本</div><div class="ps-value">${(res.green?.count||0)+(res.yellow?.count||0)+(res.red?.count||0)}</div></div>
         </div>
-        <p class="report-note">验证逻辑：取历史每天的体检评分（绿灯/黄灯/红灯），计算其后 ${days} 天的实际涨幅，按灯色分组统计平均值。如果绿灯组平均涨幅 > 黄灯组 > 红灯组，说明体检分有一定的预测区分能力。</p>`);
+        <p class="report-note">验证逻辑：取历史每天的体检灯色，计算其后 ${days} 天的实际涨幅并按灯色分组统计平均值。</p>`);
     } catch (e) { resultDiv.innerHTML = card('验证失败', '<p class="empty">' + escape(e.message) + '</p>'); }
     finally { runBtn.disabled = false; runBtn.textContent = '开始验证'; }
   };
 }
 
+async function portfolioPage() {
+  loading();
+  try {
+    const data = await api('/portfolio');
+    const { positions, summary } = data;
+    const fmt = (v, digits = 2) => Number(v || 0).toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    const pnlCls = v => v > 0 ? 'up' : v < 0 ? 'down' : '';
+    const pnlTxt = v => (v > 0 ? '+' : '') + fmt(v);
+
+    // 汇总卡
+    const summaryCards = `
+      <div class="port-summary">
+        <div class="ps-card"><div class="ps-label">总市值</div><div class="ps-value">¥${fmt(summary.totalValue)}</div></div>
+        <div class="ps-card"><div class="ps-label">总成本</div><div class="ps-value" style="color:var(--muted)">¥${fmt(summary.totalCost)}</div></div>
+        <div class="ps-card ${summary.totalPnl >= 0 ? '' : ''}"><div class="ps-label">浮动盈亏</div><div class="ps-value ${pnlCls(summary.totalPnl)}">${pnlTxt(summary.totalPnl)}</div><div class="ps-sub ${pnlCls(summary.totalPnl)}">${pnlTxt(summary.totalPnlPct)}%</div></div>
+        <div class="ps-card"><div class="ps-label">今日盈亏</div><div class="ps-value ${pnlCls(summary.todayPnl)}">${pnlTxt(summary.todayPnl)}</div><div class="ps-sub">按今日涨跌幅估算</div></div>
+        <div class="ps-card"><div class="ps-label">持仓数</div><div class="ps-value">${summary.count} 只</div></div>
+      </div>`;
+
+    // 持仓表格
+    const rows = positions.length ? positions.map(p => `
+      <tr data-id="${p.id}">
+        <td><b>${escape(p.name)}</b><br><small>${p.code}</small></td>
+        <td>${p.shares}</td>
+        <td>¥${fmt(p.costPrice)}</td>
+        <td>¥${fmt(p.price)}</td>
+        <td class="${pnlCls(p.pnl)}"><b>${pnlTxt(p.pnl)}</b></td>
+        <td class="${pnlCls(p.pnlPct)}">${pnlTxt(p.pnlPct)}%</td>
+        <td>${p.cost > 0 ? fmt((p.cost / (summary.totalCost || 1)) * 100, 1) + '%' : '—'}</td>
+        <td>${p.price ? (p.price >= p.costPrice ? '<span class="lightdot green">🟢 盈利</span>' : '<span class="lightdot red">🔴 亏损</span>') : '<span class="lightdot idle">—</span>'}</td>
+        <td><button class="mini" data-act="check" data-code="${p.code}">体检</button> <button class="mini" data-act="edit" data-id="${p.id}">编辑</button></td>
+      </tr>`).join('') : '<tr><td colspan="9" class="empty">还没有持仓，点击右上角「添加持仓」开始记录</td></tr>';
+
+    layout('工作台 · 我的持仓', `
+      <div id="indices-bar" style="margin:0 0 14px"></div>
+      <div class="port-toolbar">
+        <button class="primary" id="addPosBtn">＋ 添加持仓</button>
+        <button class="outline" id="checkAllPos">⚡ 体检全部持仓</button>
+        <button class="outline" id="refreshPos">↻ 刷新行情</button>
+      </div>
+      ${summaryCards}
+      <div id="port-check-slot"></div>
+      ${card('持仓明细', `<div class="table-wrap"><table><thead><tr><th>股票</th><th>持仓数</th><th>成本价</th><th>现价</th><th>浮动盈亏</th><th>收益率</th><th>仓位</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table></div>`, 'report-card')}
+      ${card('交易流水', '<div id="trade-list"><p class="empty">加载中…</p></div>')}
+      <div id="addPosModal" class="modal" style="display:none">
+        <div class="modal-box">
+          <h3>添加持仓</h3>
+          <label>股票代码 <input id="pos-code" placeholder="6位代码，如 600519" maxlength="6"></label>
+          <label>股票名称（可选，留空自动获取） <input id="pos-name" placeholder="如 贵州茅台"></label>
+          <label>持仓数量 <input id="pos-shares" type="number" placeholder="100" min="1"></label>
+          <label>成本价 <input id="pos-cost" type="number" placeholder="1450.50" min="0.01" step="0.01"></label>
+          <label>备注（买入理由） <input id="pos-note" placeholder="可选"></label>
+          <div class="modal-actions"><button class="outline" id="pos-cancel">取消</button><button class="primary" id="pos-save">保存</button></div>
+        </div>
+      </div>
+      <div id="editPosModal" class="modal" style="display:none">
+        <div class="modal-box">
+          <h3>编辑持仓</h3>
+          <label>持仓数量 <input id="edit-shares" type="number" min="0" step="1"></label>
+          <p style="font-size:12px;color:var(--muted)">改为 0 表示清仓（记一笔卖出流水）</p>
+          <label>成本价 <input id="edit-cost" type="number" min="0.01" step="0.01"></label>
+          <label>备注 <input id="edit-note"></label>
+          <div class="modal-actions"><button class="outline danger" id="edit-del" style="color:var(--red)">删除持仓</button><span style="flex:1"></span><button class="outline" id="edit-cancel">取消</button><button class="primary" id="edit-save">保存</button></div>
+        </div>
+      </div>`);
+    document.title = '工作台 · 牛股体检站';
+
+    // 事件绑定
+    let _editId = null;
+    const openAdd = () => { document.querySelector('#addPosModal').style.display = 'flex'; };
+    const closeAdd = () => { document.querySelector('#addPosModal').style.display = 'none'; };
+    const openEdit = (id) => {
+      const pos = positions.find(p => p.id === id);
+      if (!pos) return;
+      _editId = id;
+      document.querySelector('#edit-shares').value = pos.shares;
+      document.querySelector('#edit-cost').value = pos.costPrice;
+      document.querySelector('#edit-note').value = pos.note || '';
+      document.querySelector('#editPosModal').style.display = 'flex';
+    };
+    const closeEdit = () => { document.querySelector('#editPosModal').style.display = 'none'; };
+
+    document.querySelector('#addPosBtn').onclick = openAdd;
+    document.querySelector('#pos-cancel').onclick = closeAdd;
+    document.querySelector('#edit-cancel').onclick = closeEdit;
+    document.querySelector('#edit-del').onclick = async () => {
+      if (!_editId) return;
+      if (!confirm('确认删除该持仓？')) return;
+      await api(`/portfolio/${_editId}`, { method: 'DELETE' });
+      closeEdit(); notice('已删除', true); portfolioPage();
+    };
+    document.querySelector('#pos-save').onclick = async () => {
+      const code = document.querySelector('#pos-code').value.trim();
+      const shares = document.querySelector('#pos-shares').value;
+      const costPrice = document.querySelector('#pos-cost').value;
+      if (!/^\d{6}$/.test(code)) return notice('请输入6位股票代码');
+      if (!shares || Number(shares) <= 0) return notice('请输入正确的持仓数量');
+      if (!costPrice || Number(costPrice) <= 0) return notice('请输入正确的成本价');
+      try {
+        await api('/portfolio', { method: 'POST', body: JSON.stringify({
+          code, name: document.querySelector('#pos-name').value.trim(), shares: Number(shares), costPrice: Number(costPrice), note: document.querySelector('#pos-note').value.trim() }) });
+        closeAdd(); notice('已添加持仓', true); portfolioPage();
+      } catch (e) { notice(e.message); }
+    };
+    document.querySelector('#edit-save').onclick = async () => {
+      if (!_editId) return;
+      const shares = document.querySelector('#edit-shares').value;
+      const costPrice = document.querySelector('#edit-cost').value;
+      try {
+        await api(`/portfolio/${_editId}`, { method: 'PUT', body: JSON.stringify({ shares: Number(shares), costPrice: Number(costPrice), note: document.querySelector('#edit-note').value.trim() }) });
+        closeEdit(); notice('已保存', true); portfolioPage();
+      } catch (e) { notice(e.message); }
+    };
+    document.querySelector('#refreshPos').onclick = () => portfolioPage();
+    document.querySelector('#checkAllPos').onclick = async () => {
+      const btn = document.querySelector('#checkAllPos');
+      btn.disabled = true; btn.textContent = '体检中…';
+      const slot = document.querySelector('#port-check-slot');
+      const results = [];
+      for (let i = 0; i < positions.length; i++) {
+        btn.textContent = `体检中… ${i+1}/${positions.length}`;
+        try { const r = await api(`/stocks/${positions[i].code}/report`); results.push(r); }
+        catch { results.push(null); }
+      }
+      btn.disabled = false; btn.textContent = '⚡ 体检全部持仓';
+      const ok = results.filter(Boolean);
+      const cnt = { red: 0, yellow: 0, green: 0 };
+      ok.forEach(r => { if (cnt[r.light] != null) cnt[r.light]++; });
+      slot.innerHTML = `<div class="checkdone">✓ 已完成 ${ok.length}/${positions.length} 只体检：🔴 ${cnt.red} / 🟡 ${cnt.yellow} / 🟢 ${cnt.green}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">${ok.map(r => `<div class="port-result" data-code="${r.code}" style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer"><span class="lightdot ${r.light}">${r.light === 'green' ? '🟢' : r.light === 'yellow' ? '🟡' : '🔴'} ${r.band} ${r.health}分</span><b>${escape(r.name)}</b><small>${r.code}</small><span style="margin-left:auto;color:var(--muted);font-size:12px">点击查看详情 →</span></div>`).join('')}</div>`;
+      slot.querySelectorAll('.port-result').forEach(el => el.onclick = () => { location.hash = `#/check/${el.dataset.code}`; });
+    };
+    // 表格操作按钮
+    document.querySelectorAll('tr[data-id]').forEach(tr => {
+      tr.querySelectorAll('button[data-act="edit"]').forEach(b => b.onclick = e => { e.stopPropagation(); openEdit(b.dataset.id); });
+      tr.querySelectorAll('button[data-act="check"]').forEach(b => b.onclick = e => { e.stopPropagation(); location.hash = `#/check/${b.dataset.code}`; });
+      tr.onclick = () => { const code = tr.dataset.code; if (code) location.hash = `#/check/${code}`; };
+    });
+    // 交易流水
+    try {
+      const t = await api('/portfolio/trades');
+      const list = document.querySelector('#trade-list');
+      list.innerHTML = t.trades.length ? t.trades.map(x => `
+        <div class="trade-item"><span class="tdir ${x.direction}">${x.direction === 'buy' ? '买入' : '卖出'}</span><b>${escape(x.name)}</b><small>${x.code}</small><span>${x.shares}股 × ¥${fmt(x.price)}</span><span class="tamt">¥${fmt(x.amount)}</span><span class="tdate">${date(x.createdAt)}</span>${x.reason ? `<span class="treason">📝 ${escape(x.reason)}</span>` : ''}</div>`).join('')
+        : '<p class="empty">还没有交易记录</p>';
+    } catch { document.querySelector('#trade-list').innerHTML = '<p class="empty">加载失败</p>'; }
+  } catch (e) { checkPage(); notice(e.message); }
+}
+
+// --- 提醒系统（P1）---
+async function alertsPage() {
+  loading();
+  let rules = [], pending = [], unreadCount = 0;
+  try {
+    const data = await api('/alerts');
+    rules = data.rules || []; pending = data.pending || []; unreadCount = data.unreadCount || 0;
+  } catch { /* 首次访问时文件未创建，正常 */ }
+  layout('价格提醒', `
+    <p class="intro">为关注的股票设置价格/涨跌幅提醒，触发后会在「待读提醒」中显示（5 分钟内同条规则不重复触发）。数据保存在本机。</p>
+    <div class="port-toolbar">
+      <button class="primary" id="addAlertBtn">＋ 新建提醒</button>
+      <button class="outline" id="refreshAlerts">↻ 刷新</button>
+      <button class="outline" id="readAllAlerts">✓ 全部标为已读${unreadCount ? `（${unreadCount}）` : ''}</button>
+    </div>
+    <div id="pending-slot"></div>
+    <div id="rules-slot"></div>
+    <div id="alertModal" class="modal" style="display:none">
+      <div class="modal-box">
+        <h3>新建提醒</h3>
+        <label>股票代码 <input id="alert-code" placeholder="6位代码，如 600519" maxlength="6"></label>
+        <label>股票名称（可选） <input id="alert-name" placeholder="如 贵州茅台"></label>
+        <label>提醒类型
+          <select id="alert-type">
+            <option value="price">价格</option>
+            <option value="pct">涨跌幅(%)</option>
+          </select>
+        </label>
+        <label>触发条件
+          <select id="alert-condition">
+            <option value=">=">≥ 上穿</option>
+            <option value="<=">≤ 下穿</option>
+          </select>
+        </label>
+        <label>阈值 <input id="alert-value" type="number" step="0.01" placeholder="如 1500 或 -3"></label>
+        <div class="modal-actions"><button class="outline" id="alert-cancel">取消</button><button class="primary" id="alert-save">保存</button></div>
+      </div>
+    </div>`);
+
+  const renderPending = () => {
+    const slot = document.querySelector('#pending-slot');
+    if (!slot) return;
+    const unread = pending.filter(p => !p.read);
+    const recent = pending.slice(0, 20);
+    slot.innerHTML = recent.length
+      ? `<article class="card"><h2>待读提醒${unread.length ? ` <span class="lightdot red">${unread.length}</span>` : ''}</h2><div class="alert-list">${recent.map(p => `<div class="alert-item ${p.read ? 'read' : 'unread'}"><span class="alert-msg">${escape(p.message)}</span><time>${date(p.time)}</time></div>`).join('')}</div></article>`
+      : '<article class="card"><h2>待读提醒</h2><p class="empty">暂无触发的提醒</p></article>';
+  };
+  const renderRules = () => {
+    const slot = document.querySelector('#rules-slot');
+    if (!slot) return;
+    slot.innerHTML = rules.length
+      ? `<article class="card"><h2>提醒规则</h2><div class="table-wrap"><table><thead><tr><th>股票</th><th>类型</th><th>条件</th><th>阈值</th><th>状态</th><th>操作</th></tr></thead><tbody>${rules.map(r => `<tr data-id="${r.id}"><td><b>${escape(r.name || r.code)}</b><br><small>${r.code}</small></td><td>${r.type === 'price' ? '价格' : '涨跌幅'}</td><td>${r.condition}</td><td>${r.type === 'price' ? number(r.value) : r.value + '%'}</td><td>${r.enabled ? '<span class="lightdot green">启用</span>' : '<span class="lightdot idle">停用</span>'}</td><td><button class="mini danger" data-del="${r.id}">删除</button></td></tr>`).join('')}</tbody></table></div></article>`
+      : '<article class="card"><h2>提醒规则</h2><p class="empty">还没有提醒规则，点上方「新建提醒」创建一个。</p></article>';
+    slot.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => {
+      try { await api(`/alerts/${b.dataset.del}`, { method: 'DELETE' }); notice('已删除', true); alertsPage(); }
+      catch (e) { notice(e.message); }
+    });
+  };
+  renderPending(); renderRules();
+
+  document.querySelector('#addAlertBtn').onclick = () => { document.querySelector('#alertModal').style.display = 'flex'; };
+  document.querySelector('#alert-cancel').onclick = () => { document.querySelector('#alertModal').style.display = 'none'; };
+  document.querySelector('#alert-save').onclick = async () => {
+    const code = document.querySelector('#alert-code').value.trim();
+    if (!/^\d{6}$/.test(code)) return notice('请输入6位股票代码');
+    const value = Number(document.querySelector('#alert-value').value);
+    if (!Number.isFinite(value)) return notice('请输入有效的阈值');
+    try {
+      await api('/alerts', { method: 'POST', body: JSON.stringify({
+        code,
+        name: document.querySelector('#alert-name').value.trim(),
+        type: document.querySelector('#alert-type').value,
+        condition: document.querySelector('#alert-condition').value,
+        value,
+      }) });
+      document.querySelector('#alertModal').style.display = 'none';
+      notice('提醒已创建', true); alertsPage();
+    } catch (e) { notice(e.message); }
+  };
+  document.querySelector('#refreshAlerts').onclick = async () => {
+    try { const data = await api('/alerts/pending'); pending = data.pending || []; renderPending(); notice('已刷新', true); }
+    catch (e) { notice(e.message); }
+  };
+  document.querySelector('#readAllAlerts').onclick = async () => {
+    try { await api('/alerts/readall', { method: 'PUT' }); pending = pending.map(p => ({ ...p, read: true })); renderPending(); AlertNotifier._updateBadge(0); notice('已全部标为已读', true); }
+    catch (e) { notice(e.message); }
+  };
+  // Notification toggle
+  const notifySwitch = document.querySelector('#notifySwitch');
+  if (notifySwitch) {
+    notifySwitch.checked = AlertNotifier.isEnabled;
+    notifySwitch.onchange = () => {
+      if (notifySwitch.checked) AlertNotifier.enable();
+      else AlertNotifier.disable();
+    };
+  }
+}
+
+// --- 决策笔记（P2）---
+async function notesPage() {
+  loading();
+  let notes = [];
+  try { const data = await api('/notes'); notes = data.notes || []; } catch {}
+  layout('决策笔记', `
+    <p class="intro">记录每次买卖决策的理由、结果和教训，复盘才能进步。数据保存在本机。</p>
+    <div class="port-toolbar"><button class="primary" id="addNoteBtn">＋ 新建笔记</button></div>
+    <div id="notes-list"></div>
+    <div id="noteModal" class="modal" style="display:none">
+      <div class="modal-box">
+        <h3>新建笔记</h3>
+        <label>股票代码 <input id="note-code" placeholder="6位代码，如 600519" maxlength="6"></label>
+        <label>股票名称（可选） <input id="note-name" placeholder="如 贵州茅台"></label>
+        <label>方向
+          <select id="note-direction">
+            <option value="buy">买入</option>
+            <option value="sell">卖出</option>
+            <option value="watch">观望</option>
+          </select>
+        </label>
+        <label>理由 <textarea id="note-reason" rows="2" placeholder="为什么这么操作？"></textarea></label>
+        <label>结果 <input id="note-result" placeholder="对/错（事后填写）"></label>
+        <label>教训 <textarea id="note-lesson" rows="2" placeholder="下次该怎么改进？"></textarea></label>
+        <div class="modal-actions"><button class="outline" id="note-cancel">取消</button><button class="primary" id="note-save">保存</button></div>
+      </div>
+    </div>`);
+  const dirMeta = { buy: { txt: '买入', cls: 'up' }, sell: { txt: '卖出', cls: 'down' }, watch: { txt: '观望', cls: '' } };
+  const render = () => {
+    const slot = document.querySelector('#notes-list');
+    slot.innerHTML = notes.length
+      ? notes.map(n => {
+          const m = dirMeta[n.direction] || { txt: n.direction, cls: '' };
+          return `<article class="card note-item"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="tdir ${n.direction}" style="padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;background:${n.direction === 'buy' ? 'var(--red-soft)' : n.direction === 'sell' ? 'var(--good-soft)' : 'var(--line-soft)'};color:${n.direction === 'buy' ? 'var(--red)' : n.direction === 'sell' ? 'var(--good)' : 'var(--muted)'}">${m.txt}</span><b>${escape(n.name || n.code)}</b><small>${n.code}</small><time style="margin-left:auto;color:var(--muted);font-size:12px">${date(n.createdAt)}</time><button class="mini danger" data-del="${n.id}">删除</button></div>${n.reason ? `<p><b>理由：</b>${escape(n.reason)}</p>` : ''}${n.result ? `<p><b>结果：</b>${escape(n.result)}</p>` : ''}${n.lesson ? `<p><b>教训：</b>${escape(n.lesson)}</p>` : ''}</article>`;
+        }).join('')
+      : '<p class="empty">还没有笔记，点上方「新建笔记」记录第一笔决策。</p>';
+    slot.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => {
+      try { await api(`/notes/${b.dataset.del}`, { method: 'DELETE' }); notice('已删除', true); notesPage(); }
+      catch (e) { notice(e.message); }
+    });
+  };
+  render();
+  document.querySelector('#addNoteBtn').onclick = () => { document.querySelector('#noteModal').style.display = 'flex'; };
+  document.querySelector('#note-cancel').onclick = () => { document.querySelector('#noteModal').style.display = 'none'; };
+  document.querySelector('#note-save').onclick = async () => {
+    const code = document.querySelector('#note-code').value.trim();
+    const direction = document.querySelector('#note-direction').value;
+    if (!/^\d{6}$/.test(code)) return notice('请输入6位股票代码');
+    try {
+      await api('/notes', { method: 'POST', body: JSON.stringify({
+        code,
+        name: document.querySelector('#note-name').value.trim(),
+        direction,
+        reason: document.querySelector('#note-reason').value.trim(),
+        result: document.querySelector('#note-result').value.trim(),
+        lesson: document.querySelector('#note-lesson').value.trim(),
+      }) });
+      document.querySelector('#noteModal').style.display = 'none';
+      notice('笔记已保存', true); notesPage();
+    } catch (e) { notice(e.message); }
+  };
+}
+
+// --- 大盘指数栏 ---
 async function loadIndices() {
   const bar = document.querySelector('#indices-bar');
   if (!bar) return;
