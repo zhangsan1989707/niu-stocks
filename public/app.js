@@ -313,6 +313,8 @@ const SCAN_DIM_DESC = {
 
 function checkPage() {
   layout('个股体检', `<div class="search-row"><div class="stock-search"><span>⌕</span><input id="stock-input" autocomplete="off" placeholder="输入公司名或代码，如 比亚迪 / 002594"><div id="suggestions" class="suggestions"></div></div><button id="report-btn" class="primary">体检</button></div>
+    <!-- <a class="hot-banner" href="#/screen">🔥 不知道测哪只？看「回春法」今日精选的强势候选 →</a> -->
+    <!-- <div class="quota"><span>本机体检额度 <b>不限次数</b></span><span>数据与自选股仅保存在当前电脑</span></div> -->
     <div class="popular">🔥 大家在测：${[['600392','盛和资源'],['601138','工业富联'],['000021','深科技'],['002594','比亚迪'],['600519','贵州茅台']].map(([c,n]) => `<button data-code="${c}">${n}</button>`).join('')}</div>
     <div id="scan-slot"></div><div id="report-slot"></div><div id="favorites"></div>`);
   const input = document.querySelector('#stock-input'); let selectedCode = '';
@@ -338,9 +340,8 @@ function checkPage() {
   document.querySelectorAll('.popular button').forEach(button => button.onclick = () => run(button.dataset.code));
   let timer;
   input.oninput = () => { selectedCode = ''; clearTimeout(timer); timer = setTimeout(async () => {
-    const q = input.value.trim(); const box = document.querySelector('#suggestions'); const parent = document.querySelector('.stock-search');
+    const q = input.value.trim(); const box = document.querySelector('#suggestions');
     if (!q) return box.replaceChildren();
-    if (parent) { const r = parent.getBoundingClientRect(); box.style.left = r.left + 'px'; box.style.top = (r.bottom + 4) + 'px'; box.style.width = r.width + 'px'; box.style.display = 'block'; }
     try { const data = await api(`/stocks/search?q=${encodeURIComponent(q)}`); box.innerHTML = data.stocks.map(stock => `<button data-code="${stock.code}"><b>${stock.name}</b><span>${stock.code}</span></button>`).join(''); box.querySelectorAll('button').forEach(button => button.onclick = () => selectStock({ code: button.dataset.code, name: button.querySelector('b').textContent })); } catch { box.replaceChildren(); }
   }, 180); };
   renderFavorites();
@@ -690,58 +691,294 @@ async function loadConfig() {
 
 // --- 回测页面 ---
 async function backtestPage() {
-  layout('策略回测', `<p class="intro">基于 MACD 金叉/死叉信号模拟历史交易回测，评估策略在特定股票上的表现。结果仅供参考，不构成投资建议。</p>
-    ${card('回测参数', `<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap"><div style="flex:1;min-width:140px"><label style="display:block;font-size:13px;color:var(--muted);margin-bottom:4px">股票代码</label><input id="bt-code" style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-size:14px;outline:0" placeholder="如 600519" maxlength="6"></div><div style="flex:1;min-width:140px"><label style="display:block;font-size:13px;color:var(--muted);margin-bottom:4px">回测天数</label><select id="bt-days" style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-size:14px;outline:0;background:var(--card)"><option value="60">60 天</option><option value="120" selected>120 天</option><option value="180">180 天</option><option value="250">250 天（约一年）</option></select></div><button class="primary" id="bt-run" style="height:42px">开始回测</button></div>`)}
-    <div id="bt-result"></div>`);
+  const main = document.querySelector('main');
+  main.innerHTML = `
+    <section class="card">
+      <h2>策略回测</h2>
+      <p class="muted">基于 MACD 金叉/死叉信号模拟历史交易回测，评估策略在特定股票上的表现。结果仅供参考，不构成投资建议。</p>
+      <div class="bt-form">
+        <div class="bt-field">
+          <label class="cfg-label" for="bt-code">股票代码</label>
+          <input class="cfg-input" id="bt-code" type="text" placeholder="如 600519" maxlength="6" value="">
+        </div>
+        <div class="bt-field">
+          <label class="cfg-label" for="bt-days">回测天数</label>
+          <select class="cfg-input" id="bt-days">
+            <option value="60">60 天</option>
+            <option value="120" selected>120 天</option>
+            <option value="180">180 天</option>
+            <option value="250">250 天（约一年）</option>
+          </select>
+        </div>
+        <button class="bt-run" id="bt-run">开始回测</button>
+      </div>
+    </section>
+    <div id="bt-result"></div>
+  `;
+
+  // 尝试填充当前选中股票
+  const cur = document.querySelector('#stockSelect');
+  if (cur && cur.value) {
+    const inp = document.querySelector('#bt-code');
+    if (inp) inp.value = cur.value;
+  }
+
   const runBtn = document.querySelector('#bt-run');
   const resultDiv = document.querySelector('#bt-result');
+
   runBtn.onclick = async () => {
     const code = document.querySelector('#bt-code').value.trim();
     const days = document.querySelector('#bt-days').value;
     if (!/^\d{6}$/.test(code)) { notice('请输入 6 位股票代码'); return; }
-    runBtn.disabled = true; runBtn.textContent = '回测中…';
-    resultDiv.innerHTML = '<div class="loading" style="margin:40px auto">计算回测数据…</div>';
+
+    runBtn.disabled = true;
+    runBtn.textContent = '回测中…';
+    resultDiv.innerHTML = '<div class="card"><p class="muted center">正在计算回测数据…</p></div>';
+
     try {
-      const res = await api(`/backtest?code=${encoencodeURIComponent(code)}&days=${days}`);
-      if (!res.ok || res.signals === 0) {
-        resultDiv.innerHTML = card('回测结果', '<p class="empty">未产生任何交易信号。</p>');
-      } else {
-        const wr = res.winRate >= 50 ? 'var(--red)' : 'var(--good)';
-        const tr = res.totalReturn >= 0 ? 'var(--red)' : 'var(--good)';
-        resultDiv.innerHTML = card('回测结果 · ' + escape(code), `<p class="report-note">回测周期 ${res.days} 天 · 共 ${res.signals} 个信号</p>
-          <div class="port-summary" style="margin:10px 0"><div class="ps-card"><div class="ps-label">胜率</div><div class="ps-value" style="color:${wr}">${res.winRate}%</div></div><div class="ps-card"><div class="ps-label">总收益</div><div class="ps-value" style="color:${tr}">${res.totalReturn >= 0 ? '+' : ''}${res.totalReturn}%</div></div><div class="ps-card"><div class="ps-label">最大回撤</div><div class="ps-value" style="color:var(--green)">${res.maxDrawdown}%</div></div><div class="ps-card"><div class="ps-label">获胜次数</div><div class="ps-value">${res.wins}/${res.signals}</div></div></div>
-          ${res.disclaimer ? '<p class="report-note" style="color:var(--amber)">' + escape(res.disclaimer) + '</p>' : ''}`);
-      }
-    } catch (e) { resultDiv.innerHTML = card('回测失败', '<p class="empty">' + escape(e.message) + '</p>'); }
-    finally { runBtn.disabled = false; runBtn.textContent = '开始回测'; }
+      const res = await api(`/backtest?code=${code}&days=${days}`);
+      renderBacktestResult(res, code, days);
+    } catch (e) {
+      resultDiv.innerHTML = `<div class="card"><p class="error">回测失败：${e.message}</p></div>`;
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = '开始回测';
+    }
   };
+}
+
+function renderBacktestResult(res, code, days) {
+  const div = document.querySelector('#bt-result');
+  if (!res.ok || !res.signals || res.signals.length === 0) {
+    div.innerHTML = `<div class="card"><p class="muted center">未产生任何交易信号，可能数据不足或该时间段内无金叉/死叉。</p></div>`;
+    return;
+  }
+
+  const winRateColor = res.winRate >= 50 ? 'var(--red, #c0392b)' : 'var(--green, #27ae60)';
+  const totalReturnColor = res.totalReturn >= 0 ? 'var(--red, #c0392b)' : 'var(--green, #27ae60)';
+
+  // 信号列表（最近 20 条）
+  const recentSignals = res.signals.slice(-20).reverse();
+  const signalRows = recentSignals.map(s => {
+    const isWin = s.profit !== undefined && s.profit > 0;
+    const actionColor = s.action === 'buy' ? 'var(--red, #c0392b)' : 'var(--green, #27ae60)';
+    return `
+      <tr>
+        <td>${s.date}</td>
+        <td style="color:${actionColor};font-weight:600">${s.action === 'buy' ? '买入' : '卖出'}</td>
+        <td class="tnum">${Number(s.price).toFixed(2)}</td>
+        ${s.profit !== undefined ? `<td class="tnum" style="color:${isWin ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)'}">${s.profit > 0 ? '+' : ''}${s.profit.toFixed(2)}%</td>` : '<td class="muted">—</td>'}
+      </tr>`;
+  }).join('');
+
+  div.innerHTML = `
+    <section class="card">
+      <h2>回测结果 · ${code}</h2>
+      <p class="muted">回测周期 ${days} 天 · 共 ${res.signalCount || res.signals.length} 个信号</p>
+      <div class="bt-stats">
+        <div class="bt-stat">
+          <span class="bt-stat-label">胜率</span>
+          <span class="bt-stat-val tnum" style="color:${winRateColor}">${res.winRate.toFixed(1)}%</span>
+        </div>
+        <div class="bt-stat">
+          <span class="bt-stat-label">总收益</span>
+          <span class="bt-stat-val tnum" style="color:${totalReturnColor}">${res.totalReturn >= 0 ? '+' : ''}${res.totalReturn.toFixed(2)}%</span>
+        </div>
+        <div class="bt-stat">
+          <span class="bt-stat-label">最大回撤</span>
+          <span class="bt-stat-val tnum" style="color:var(--green,#27ae60)">${res.maxDrawdown.toFixed(2)}%</span>
+        </div>
+        <div class="bt-stat">
+          <span class="bt-stat-label">盈利次数</span>
+          <span class="bt-stat-val tnum">${res.wins} / ${res.signals.filter(s => s.action === 'sell').length}</span>
+        </div>
+      </div>
+    </section>
+    <section class="card">
+      <h3>交易信号明细（最近 20 条）</h3>
+      <div class="table-wrap">
+        <table class="bt-table">
+          <thead><tr><th>日期</th><th>操作</th><th>价格</th><th>收益</th></tr></thead>
+          <tbody>${signalRows}</tbody>
+        </table>
+      </div>
+    </section>
+    ${res.disclaimer ? `<p class="muted small center bt-disclaimer">${res.disclaimer}</p>` : ''}
+  `;
 }
 
 // --- 体检分有效性验证页面 ---
 async function validatePage() {
-  layout('体检分验证', `<p class="intro">验证体检分的预测区分能力，按绿灯/黄灯/红灯分组统计后续实际涨跌。</p>
-    ${card('验证参数', `<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap"><div style="flex:1;min-width:140px"><label style="display:block;font-size:13px;color:var(--muted);margin-bottom:4px">预测周期</label><select id="val-days" style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-size:14px;outline:0;background:var(--card)"><option value="3">3 天</option><option value="5" selected>5 天</option><option value="10">10 天</option><option value="20">20 天</option></select></div><button class="primary" id="val-run" style="height:42px">开始验证</button></div>`)}
-    <div id="val-result"></div>`);
+  const main = document.querySelector('main');
+  main.innerHTML = `
+    <section class="card">
+      <h2>体检分有效性验证</h2>
+      <p class="muted">将历史体检评分与后续实际涨跌对比，验证体检分的预测能力。按绿灯 / 黄灯 / 红灯分组统计平均涨跌和胜率。</p>
+      <div class="bt-form">
+        <div class="bt-field">
+          <label class="cfg-label" for="val-days">预测周期</label>
+          <select class="cfg-input" id="val-days">
+            <option value="3">3 天</option>
+            <option value="5" selected>5 天</option>
+            <option value="10">10 天</option>
+            <option value="20">20 天</option>
+          </select>
+        </div>
+        <button class="bt-run" id="val-run">开始验证</button>
+      </div>
+    </section>
+    <div id="val-result"></div>
+  `;
+
   const runBtn = document.querySelector('#val-run');
   const resultDiv = document.querySelector('#val-result');
+
   runBtn.onclick = async () => {
     const days = document.querySelector('#val-days').value;
-    runBtn.disabled = true; runBtn.textContent = '验证中…';
-    resultDiv.innerHTML = '<div class="loading" style="margin:40px auto">分析历史体检数据…</div>';
+    runBtn.disabled = true;
+    runBtn.textContent = '验证中…';
+    resultDiv.innerHTML = '<div class="card"><p class="muted center">正在分析历史体检数据…</p></div>';
+
     try {
       const res = await api(`/validate?days=${days}`);
-      if (!res.ok) { resultDiv.innerHTML = card('验证失败', '<p class="empty">' + escape(res.error || '数据不足') + '</p>'); runBtn.disabled = false; runBtn.textContent = '开始验证'; return; }
-      resultDiv.innerHTML = card('验证结果 · ' + days + '天预测周期', `
-        <div class="port-summary">
-          <div class="ps-card"><div class="ps-label">绿灯</div><div class="ps-value" style="color:var(--good)">${res.green ? res.green.avgPct?.toFixed(2) + '%' : '—'}</div></div>
-          <div class="ps-card"><div class="ps-label">黄灯</div><div class="ps-value" style="color:var(--amber)">${res.yellow ? res.yellow.avgPct?.toFixed(2) + '%' : '—'}</div></div>
-          <div class="ps-card"><div class="ps-label">红灯</div><div class="ps-value" style="color:var(--red)">${res.red ? res.red.avgPct?.toFixed(2) + '%' : '—'}</div></div>
-          <div class="ps-card"><div class="ps-label">样本</div><div class="ps-value">${(res.green?.count||0)+(res.yellow?.count||0)+(res.red?.count||0)}</div></div>
-        </div>
-        <p class="report-note">验证逻辑：取历史每天的体检灯色，计算其后 ${days} 天的实际涨幅并按灯色分组统计平均值。</p>`);
-    } catch (e) { resultDiv.innerHTML = card('验证失败', '<p class="empty">' + escape(e.message) + '</p>'); }
-    finally { runBtn.disabled = false; runBtn.textContent = '开始验证'; }
+      renderValidateResult(res);
+    } catch (e) {
+      resultDiv.innerHTML = `<div class="card"><p class="error">验证失败：${e.message}</p></div>`;
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = '开始验证';
+    }
   };
+}
+
+function renderValidateResult(res) {
+  const div = document.querySelector('#val-result');
+
+  if (!res.samples || res.samples === 0) {
+    div.innerHTML = `<div class="card"><p class="muted center">${res.message || '历史体检记录不足，无法验证。请多使用体检功能积累数据后再试。'}</p></div>`;
+    return;
+  }
+
+  const lightColors = { green: 'var(--red,#c0392b)', yellow: 'var(--blue,#3d5a96)', red: 'var(--green,#27ae60)' };
+  const groupCards = Object.entries(res.groups).map(([key, g]) => {
+    const retColor = g.avgReturn >= 0 ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)';
+    const winColor = g.winRate >= 50 ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)';
+    return `
+      <div class="bt-stat">
+        <span class="bt-stat-label">${g.name}（${g.count} 样本）</span>
+        <span class="bt-stat-val tnum" style="color:${retColor}">${g.avgReturn >= 0 ? '+' : ''}${g.avgReturn}%</span>
+        <span class="bt-stat-sub tnum" style="color:${winColor}">胜率 ${g.winRate}%</span>
+      </div>`;
+  }).join('');
+
+  const detailRows = (res.detail || []).map(d => {
+    const retColor = d.forwardReturn >= 0 ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)';
+    const lightBadge = d.light === 'green' ? '绿灯' : d.light === 'yellow' ? '黄灯' : '红灯';
+    const badgeColor = lightColors[d.light] || 'var(--text-mid,#666)';
+    return `
+      <tr>
+        <td class="tnum">${d.code}</td>
+        <td>${d.name || '—'}</td>
+        <td class="tnum">${d.date}</td>
+        <td class="tnum" style="color:${badgeColor};font-weight:600">${d.health}（${lightBadge}）</td>
+        <td class="tnum" style="color:${retColor}">${d.forwardReturn >= 0 ? '+' : ''}${d.forwardReturn}%</td>
+      </tr>`;
+  }).join('');
+
+  div.innerHTML = `
+    <section class="card">
+      <h2>验证结果 · ${res.forwardDays} 天预测周期</h2>
+      <p class="muted">总样本 ${res.samples} 条 · 整体上涨概率 <strong class="tnum">${res.totalWinRate}%</strong></p>
+      <div class="bt-stats">${groupCards}</div>
+    </section>
+    ${res.detail && res.detail.length > 0 ? `
+    <section class="card">
+      <h3>样本明细（最近 ${res.detail.length} 条）</h3>
+      <div class="table-wrap">
+        <table class="bt-table">
+          <thead><tr><th>代码</th><th>名称</th><th>体检日期</th><th>体检分</th><th>${res.forwardDays}日涨跌</th></tr></thead>
+          <tbody>${detailRows}</tbody>
+        </table>
+      </div>
+    </section>` : ''}
+    ${res.disclaimer ? `<p class="muted small center bt-disclaimer">${res.disclaimer}</p>` : ''}
+  `;
+}
+
+// --- 通用 Tooltip ---
+let _tipTimer = null;
+function showTooltip(e, el) {
+  hideTooltip();
+  const tip = document.createElement('div');
+  tip.className = 'ct-tooltip';
+  tip.id = 'ctTooltip';
+  const meaning = el.dataset.tooltip || '';
+  const signal = el.dataset.tooltipSignal || '';
+  tip.innerHTML = `<div class="ct-tt-mean">${meaning}</div>${signal ? `<div class="ct-tt-signal">📌 ${signal}</div>` : ''}`;
+  document.body.appendChild(tip);
+  const rect = el.getBoundingClientRect();
+  let top = rect.bottom + 6;
+  let left = rect.left + rect.width / 2;
+  tip.style.top = top + 'px';
+  tip.style.left = left + 'px';
+  tip.style.transform = 'translateX(-50%)';
+  // Ensure within viewport
+  const tr = tip.getBoundingClientRect();
+  if (tr.right > window.innerWidth - 8) tip.style.left = (window.innerWidth - tr.width - 8) + 'px';
+  if (tr.left < 8) tip.style.left = '8px';
+  if (tr.bottom > window.innerHeight - 8) tip.style.top = (rect.top - tr.height - 6) + 'px';
+}
+function hideTooltip() {
+  const t = document.getElementById('ctTooltip');
+  if (t) t.remove();
+  clearTimeout(_tipTimer);
+}
+// Delegated event listeners for all has-tip elements
+document.addEventListener('mouseover', e => {
+  const el = e.target.closest('.has-tip');
+  if (!el || !el.dataset.tooltip) return;
+  _tipTimer = setTimeout(() => showTooltip(e, el), 300);
+});
+document.addEventListener('mouseout', e => {
+  const el = e.target.closest('.has-tip');
+  if (!el) return;
+  clearTimeout(_tipTimer);
+  hideTooltip();
+});
+document.addEventListener('touchstart', e => {
+  const el = e.target.closest('.has-tip');
+  if (!el || !el.dataset.tooltip) return;
+  e.preventDefault();
+  showTooltip(e, el);
+  _tipTimer = setTimeout(hideTooltip, 2800);
+});
+
+
+// --- 工作台：持仓管理（P0）---
+// (indices bar rendered by loadIndices)
+// 体检历史迷你折线（调用 /api/stocks/{code}/history）
+function renderCheckHistory(code) {
+  const slot = document.createElement('div');
+  slot.className = 'check-history';
+  slot.innerHTML = '<div class="seclbl">体检历史（近 14 天健康分）</div><div style="color:var(--muted);font-size:13px;padding:8px 0">加载中…</div>';
+  api(`/stocks/${code}/history`).then(hist => {
+    const entries = hist.entries || [];
+    if (entries.length < 2) { slot.innerHTML = '<div class="seclbl">体检历史</div><div class="local-note" style="margin:0;padding:12px">多体检几次就会在这里显示健康分趋势（每天记一次）</div>'; return; }
+    const scores = entries.map(e => e.health);
+    const min = Math.min(...scores, 0), max = Math.max(...scores, 100);
+    const span = Math.max(max - min, 1);
+    const w = 460, h = 60, pad = 4;
+    const pts = entries.map((e, i) => `${(i / (entries.length - 1) * (w - pad * 2) + pad).toFixed(1)},${(h - pad - (e.health - min) / span * (h - pad * 2)).toFixed(1)}`).join(' ');
+    const dots = entries.map((e, i) => {
+      const x = (i / (entries.length - 1) * (w - pad * 2) + pad).toFixed(1);
+      const y = (h - pad - (e.health - min) / span * (h - pad * 2)).toFixed(1);
+      const color = e.light === 'green' ? '#16a34a' : e.light === 'yellow' ? '#d97706' : '#dc2626';
+      return `<circle cx="${x}" cy="${y}" r="3.5" fill="${color}"/><text x="${x}" y="${h - 1}" font-size="8" fill="#94a3b8" text-anchor="middle">${e.date.slice(5)}</text>`;
+    }).join('');
+    const last = entries[entries.length - 1];
+    slot.innerHTML = `<div class="seclbl">体检历史（近 ${entries.length} 天健康分）</div><svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:#f8fafc;border-radius:8px"><polyline points="${pts}" fill="none" stroke="#4f6cae" stroke-width="1.6" opacity=".8"/>${dots}</svg><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--muted)"><span>最新：<b style="color:${last.light === 'green' ? 'var(--good)' : last.light === 'yellow' ? 'var(--amber)' : 'var(--red)'}">${last.band} ${last.health}分</b>（${last.date}）</span><span>收盘 ${number(last.close)}</span></div>`;
+  }).catch(() => { slot.innerHTML = ''; });
+  return slot.outerHTML;
 }
 
 async function portfolioPage() {

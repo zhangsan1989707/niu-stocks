@@ -283,11 +283,13 @@ p { margin: 8px 0; line-height: 1.7; text-wrap: pretty; }
 
 /* ========== Suggestions ========== */
 .suggestions {
-  position: fixed;
-  z-index: 200;
+  position: absolute;
+  z-index: 9999;
+  left: 0; right: 0;
+  top: 52px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   background: var(--card);
   box-shadow: var(--shadow-xl);
 }
