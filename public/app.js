@@ -338,8 +338,9 @@ function checkPage() {
   document.querySelectorAll('.popular button').forEach(button => button.onclick = () => run(button.dataset.code));
   let timer;
   input.oninput = () => { selectedCode = ''; clearTimeout(timer); timer = setTimeout(async () => {
-    const q = input.value.trim(); const box = document.querySelector('#suggestions');
+    const q = input.value.trim(); const box = document.querySelector('#suggestions'); const parent = document.querySelector('.stock-search');
     if (!q) return box.replaceChildren();
+    if (parent) { const r = parent.getBoundingClientRect(); box.style.left = r.left + 'px'; box.style.top = (r.bottom + 4) + 'px'; box.style.width = r.width + 'px'; box.style.display = 'block'; }
     try { const data = await api(`/stocks/search?q=${encodeURIComponent(q)}`); box.innerHTML = data.stocks.map(stock => `<button data-code="${stock.code}"><b>${stock.name}</b><span>${stock.code}</span></button>`).join(''); box.querySelectorAll('button').forEach(button => button.onclick = () => selectStock({ code: button.dataset.code, name: button.querySelector('b').textContent })); } catch { box.replaceChildren(); }
   }, 180); };
   renderFavorites();
