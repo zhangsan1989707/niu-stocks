@@ -60,6 +60,18 @@ function renderClassicPatterns(cp) {
   return `<div class="seclbl">经典图表形态<span style="font-weight:400;color:#9098a9;font-size:12px">（本组 ${cp.pts > 0 ? '+' + cp.pts : cp.pts} 分）</span></div><div class="dims">${rows}</div>`;
 }
 
+// --- 多周期分析渲染 ---
+function renderMultiPeriod(mp) {
+  if (!mp || !mp.sufficient) return '';
+  const periodRows = (mp.periods || []).map(p => {
+    if (!p.sufficient) return `<div class="dimrow2 neu"><span class="fpts idle">·</span><span class="dn">${p.label}</span><span class="dwhy">${escape(p.note || '数据不足')}</span></div>`;
+    const trendCls = p.trend === '偏多' ? 'pos' : p.trend === '偏空' ? 'neg' : 'neu';
+    const macdLabel = p.macdUp ? '多头' : '空头';
+    return `<div class="dimrow2 ${trendCls}"><span class="fpts ${p.trend === '中性' ? 'idle' : ''}">${p.trend}</span><span class="dn">${p.label}</span><span class="dwhy">收盘 ${p.close} / MA5 ${p.ma5} / MA20 ${p.ma20} / MACD ${macdLabel} / ${p.maAlign} / RSI ${p.rsi}</span></div>`;
+  }).join('');
+  return `<div class="consult-box ${mp.cls}"><b>多周期共振</b>（日线 / 周线 / 月线 三个级别）${periodRows}<div class="consult-sum"><b>综合：${mp.alignment}</b>（${mp.bulls} 偏多 / ${mp.bears} 偏空 / ${mp.neutrals} 中性）${escape(mp.verdict)}</div></div>`;
+}
+
 // --- 增强 K 线图 ---
 function drawChart(chart) {
   if (!chart || !chart.bars || chart.bars.length < 2) return '<div class="empty">暂无足够K线</div>';
@@ -395,6 +407,7 @@ function renderReport(data) {
     ${card('摆动指标组', renderMurphy(data.murphy), 'report-card')}
     ${card('经典图表形态', renderClassicPatterns(data.patterns_classic), 'report-card')}
     ${card('四方会诊', renderConsult(data.consult), 'report-card')}
+    ${data.multiPeriod && data.multiPeriod.sufficient ? card('多周期分析', renderMultiPeriod(data.multiPeriod), 'report-card') : ''}
     <div id="favorites"></div>`);
   document.querySelector('#back').onclick = () => { location.hash = '#/check'; checkPage(); };
   const chartEl = document.querySelector('#chart');
@@ -760,7 +773,7 @@ function renderBacktestResult(res, code, days) {
   div.innerHTML = `
     <section class="card">
       <h2>回测结果 · ${code}</h2>
-      <p class="muted">回测周期 ${days} 天 · 共 ${res.signals.length} 个信号</p>
+      <p class="muted">回测周期 ${days} 天 · 共 ${res.signalCount || res.signals.length} 个信号</p>
       <div class="bt-stats">
         <div class="bt-stat">
           <span class="bt-stat-label">胜率</span>
@@ -789,6 +802,104 @@ function renderBacktestResult(res, code, days) {
         </table>
       </div>
     </section>
+    ${res.disclaimer ? `<p class="muted small center bt-disclaimer">${res.disclaimer}</p>` : ''}
+  `;
+}
+
+// --- 体检分有效性验证页面 ---
+async function validatePage() {
+  const main = document.querySelector('main');
+  main.innerHTML = `
+    <section class="card">
+      <h2>体检分有效性验证</h2>
+      <p class="muted">将历史体检评分与后续实际涨跌对比，验证体检分的预测能力。按绿灯 / 黄灯 / 红灯分组统计平均涨跌和胜率。</p>
+      <div class="bt-form">
+        <div class="bt-field">
+          <label class="cfg-label" for="val-days">预测周期</label>
+          <select class="cfg-input" id="val-days">
+            <option value="3">3 天</option>
+            <option value="5" selected>5 天</option>
+            <option value="10">10 天</option>
+            <option value="20">20 天</option>
+          </select>
+        </div>
+        <button class="bt-run" id="val-run">开始验证</button>
+      </div>
+    </section>
+    <div id="val-result"></div>
+  `;
+
+  const runBtn = document.querySelector('#val-run');
+  const resultDiv = document.querySelector('#val-result');
+
+  runBtn.onclick = async () => {
+    const days = document.querySelector('#val-days').value;
+    runBtn.disabled = true;
+    runBtn.textContent = '验证中…';
+    resultDiv.innerHTML = '<div class="card"><p class="muted center">正在分析历史体检数据…</p></div>';
+
+    try {
+      const res = await api(`/validate?days=${days}`);
+      renderValidateResult(res);
+    } catch (e) {
+      resultDiv.innerHTML = `<div class="card"><p class="error">验证失败：${e.message}</p></div>`;
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = '开始验证';
+    }
+  };
+}
+
+function renderValidateResult(res) {
+  const div = document.querySelector('#val-result');
+
+  if (!res.samples || res.samples === 0) {
+    div.innerHTML = `<div class="card"><p class="muted center">${res.message || '历史体检记录不足，无法验证。请多使用体检功能积累数据后再试。'}</p></div>`;
+    return;
+  }
+
+  const lightColors = { green: 'var(--red,#c0392b)', yellow: 'var(--blue,#3d5a96)', red: 'var(--green,#27ae60)' };
+  const groupCards = Object.entries(res.groups).map(([key, g]) => {
+    const retColor = g.avgReturn >= 0 ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)';
+    const winColor = g.winRate >= 50 ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)';
+    return `
+      <div class="bt-stat">
+        <span class="bt-stat-label">${g.name}（${g.count} 样本）</span>
+        <span class="bt-stat-val tnum" style="color:${retColor}">${g.avgReturn >= 0 ? '+' : ''}${g.avgReturn}%</span>
+        <span class="bt-stat-sub tnum" style="color:${winColor}">胜率 ${g.winRate}%</span>
+      </div>`;
+  }).join('');
+
+  const detailRows = (res.detail || []).map(d => {
+    const retColor = d.forwardReturn >= 0 ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)';
+    const lightBadge = d.light === 'green' ? '绿灯' : d.light === 'yellow' ? '黄灯' : '红灯';
+    const badgeColor = lightColors[d.light] || 'var(--text-mid,#666)';
+    return `
+      <tr>
+        <td class="tnum">${d.code}</td>
+        <td>${d.name || '—'}</td>
+        <td class="tnum">${d.date}</td>
+        <td class="tnum" style="color:${badgeColor};font-weight:600">${d.health}（${lightBadge}）</td>
+        <td class="tnum" style="color:${retColor}">${d.forwardReturn >= 0 ? '+' : ''}${d.forwardReturn}%</td>
+      </tr>`;
+  }).join('');
+
+  div.innerHTML = `
+    <section class="card">
+      <h2>验证结果 · ${res.forwardDays} 天预测周期</h2>
+      <p class="muted">总样本 ${res.samples} 条 · 整体上涨概率 <strong class="tnum">${res.totalWinRate}%</strong></p>
+      <div class="bt-stats">${groupCards}</div>
+    </section>
+    ${res.detail && res.detail.length > 0 ? `
+    <section class="card">
+      <h3>样本明细（最近 ${res.detail.length} 条）</h3>
+      <div class="table-wrap">
+        <table class="bt-table">
+          <thead><tr><th>代码</th><th>名称</th><th>体检日期</th><th>体检分</th><th>${res.forwardDays}日涨跌</th></tr></thead>
+          <tbody>${detailRows}</tbody>
+        </table>
+      </div>
+    </section>` : ''}
     ${res.disclaimer ? `<p class="muted small center bt-disclaimer">${res.disclaimer}</p>` : ''}
   `;
 }
@@ -1076,9 +1187,18 @@ async function alertsPage() {
     catch (e) { notice(e.message); }
   };
   document.querySelector('#readAllAlerts').onclick = async () => {
-    try { await api('/alerts/readall', { method: 'PUT' }); pending = pending.map(p => ({ ...p, read: true })); renderPending(); notice('已全部标为已读', true); }
+    try { await api('/alerts/readall', { method: 'PUT' }); pending = pending.map(p => ({ ...p, read: true })); renderPending(); AlertNotifier._updateBadge(0); notice('已全部标为已读', true); }
     catch (e) { notice(e.message); }
   };
+  // Notification toggle
+  const notifySwitch = document.querySelector('#notifySwitch');
+  if (notifySwitch) {
+    notifySwitch.checked = AlertNotifier.isEnabled;
+    notifySwitch.onchange = () => {
+      if (notifySwitch.checked) AlertNotifier.enable();
+      else AlertNotifier.disable();
+    };
+  }
 }
 
 // --- 决策笔记（P2）---
@@ -1166,7 +1286,7 @@ async function loadIndices() {
 function router() {
   const path = location.hash.slice(2) || 'check';
   if (path.startsWith('check/')) { const code = path.split('/')[1]; checkPage(); setTimeout(() => { document.querySelector('#stock-input').value = code; api(`/stocks/${code}/report`).then(r => { const scanSlot = document.querySelector('#scan-slot'); if (scanSlot) playScanAnim(scanSlot, Promise.resolve({j:r}), {title:'个股体检中'}).then(({j}) => j && renderReport(j)); }).catch(e => notice(e.message)); }, 100); return; }
-  ({ check: checkPage, screen: screenPage, backtest: backtestPage, rules: rulesPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
+  ({ check: checkPage, screen: screenPage, backtest: backtestPage, validate: validatePage, rules: rulesPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
 }
 loadIndices();
 setInterval(loadIndices, 60000);
@@ -1181,3 +1301,108 @@ document.querySelectorAll('header nav a, header .brand').forEach(a => {
     }
   });
 });
+
+// --- 提醒推送化 (P2-4) ---
+const AlertNotifier = {
+  _timer: null,
+  _lastNotifyIds: new Set(),
+  _enabled: false,
+
+  init() {
+    // Check localStorage for notification preference
+    this._enabled = localStorage.getItem('alert_notify') === 'true';
+    if (this._enabled && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        this.start();
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(p => {
+          if (p === 'granted') this.start();
+          else { this._enabled = false; localStorage.setItem('alert_notify', 'false'); }
+        });
+      }
+    }
+  },
+
+  enable() {
+    if (!('Notification' in window)) { notice('当前浏览器不支持通知'); return false; }
+    if (Notification.permission === 'granted') {
+      this._enabled = true; localStorage.setItem('alert_notify', 'true'); this.start();
+      return true;
+    }
+    if (Notification.permission === 'denied') {
+      notice('通知权限已被拒绝，请在浏览器设置中手动开启');
+      return false;
+    }
+    Notification.requestPermission().then(p => {
+      if (p === 'granted') {
+        this._enabled = true; localStorage.setItem('alert_notify', 'true'); this.start();
+        notice('通知推送已开启', true);
+      } else {
+        notice('通知权限未授权');
+      }
+    });
+    return true;
+  },
+
+  disable() {
+    this._enabled = false; localStorage.setItem('alert_notify', 'false');
+    if (this._timer) { clearInterval(this._timer); this._timer = null; }
+    notice('通知推送已关闭');
+  },
+
+  get isEnabled() { return this._enabled; },
+
+  start() {
+    if (this._timer) return;
+    // Poll every 60 seconds
+    this._check();
+    this._timer = setInterval(() => this._check(), 60000);
+  },
+
+  async _check() {
+    if (!this._enabled) return;
+    try {
+      const data = await fetch('/api/alerts/pending').then(r => r.json());
+      if (!data.ok) return;
+      // Update nav badge
+      this._updateBadge(data.unreadCount || 0);
+      // Push browser notifications for new triggers
+      if (data.pending && Notification.permission === 'granted') {
+        for (const p of data.pending) {
+          if (!p.read && !this._lastNotifyIds.has(p.id)) {
+            this._lastNotifyIds.add(p.id);
+            new Notification('\u26a0\ufe0f \u63d0\u9192\u89e6\u53d1', {
+              body: p.message,
+              icon: '/favicon.ico',
+              tag: p.id,
+            });
+          }
+        }
+        // Keep only recent 50 ids
+        if (this._lastNotifyIds.size > 50) {
+          const arr = [...this._lastNotifyIds];
+          this._lastNotifyIds = new Set(arr.slice(-50));
+        }
+      }
+    } catch {}
+  },
+
+  _updateBadge(count) {
+    let badge = document.querySelector('#alert-badge');
+    const navLink = document.querySelector('header nav a[href="#/alerts"]');
+    if (!navLink) return;
+    if (count > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.id = 'alert-badge';
+        badge.className = 'nav-badge';
+        navLink.appendChild(badge);
+      }
+      badge.textContent = count > 99 ? '99+' : count;
+    } else if (badge) {
+      badge.remove();
+    }
+  },
+};
+
+AlertNotifier.init();
