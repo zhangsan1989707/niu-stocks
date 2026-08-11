@@ -331,17 +331,18 @@ function checkPage() {
     if (!j) { notice('体检失败，请稍后重试'); return; }
     renderReport(j);
   };
-  const selectStock = stock => { selectedCode = stock.code; input.value = `${stock.name} · ${stock.code}`; document.querySelector('#suggestions').replaceChildren(); input.focus(); };
+  const selectStock = stock => { selectedCode = stock.code; input.value = `${stock.name} · ${stock.code}`; document.querySelector('#suggestions').replaceChildren(); const p = document.querySelector('.popular'); if (p) p.style.display = ''; input.focus(); };
   document.querySelector('#report-btn').onclick = () => run(input.value.trim());
   input.onkeydown = e => {
     if (e.key === 'Enter') { e.preventDefault(); const first = document.querySelector('#suggestions button'); if (first && !selectedCode) return first.click(); run(input.value.trim()); }
-    if (e.key === 'Escape') document.querySelector('#suggestions').replaceChildren();
+    if (e.key === 'Escape') { document.querySelector('#suggestions').replaceChildren(); const p = document.querySelector('.popular'); if (p) p.style.display = ''; }
   };
   document.querySelectorAll('.popular button').forEach(button => button.onclick = () => run(button.dataset.code));
   let timer;
   input.oninput = () => { selectedCode = ''; clearTimeout(timer); timer = setTimeout(async () => {
-    const q = input.value.trim(); const box = document.querySelector('#suggestions');
-    if (!q) return box.replaceChildren();
+    const q = input.value.trim(); const box = document.querySelector('#suggestions'); const popular = document.querySelector('.popular');
+    if (!q) { box.replaceChildren(); if (popular) popular.style.display = ''; return; }
+    if (popular) popular.style.display = 'none';
     try { const data = await api(`/stocks/search?q=${encodeURIComponent(q)}`); box.innerHTML = data.stocks.map(stock => `<button data-code="${stock.code}"><b>${stock.name}</b><span>${stock.code}</span></button>`).join(''); box.querySelectorAll('button').forEach(button => button.onclick = () => selectStock({ code: button.dataset.code, name: button.querySelector('b').textContent })); } catch { box.replaceChildren(); }
   }, 180); };
   renderFavorites();
