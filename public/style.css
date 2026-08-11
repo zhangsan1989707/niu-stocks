@@ -1102,13 +1102,15 @@ footer {
   padding: 10px 14px;
   box-shadow: var(--shadow-sm);
   transition: box-shadow var(--dur) var(--ease);
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 .idx-card:hover { box-shadow: var(--shadow); }
 .idx-card.up { border-left: 3px solid var(--red); }
 .idx-card.down { border-left: 3px solid var(--good); }
-.idx-name { font-size: 12px; color: var(--muted); font-weight: 600; flex-shrink: 0; }
-.idx-price { font-size: 16px; font-weight: 800; font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.idx-chg { font-size: 12px; font-weight: 700; margin-left: auto; font-variant-numeric: tabular-nums; }
+.idx-name { font-size: 12px; color: var(--muted); font-weight: 600; flex-shrink: 0; white-space: nowrap; }
+.idx-price { font-size: 16px; font-weight: 800; font-family: var(--mono); font-variant-numeric: tabular-nums; flex-shrink: 0; white-space: nowrap; }
+.idx-chg { font-size: 12px; font-weight: 700; margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
 .idx-card.up .idx-chg { color: var(--red); }
 .idx-card.down .idx-chg { color: var(--good); }
 
