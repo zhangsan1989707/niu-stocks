@@ -972,8 +972,8 @@ function renderCheckHistory(code) {
   const slot = document.createElement('div');
   slot.className = 'check-history';
   slot.innerHTML = '<div class="seclbl">体检历史（近 14 天健康分）</div><div style="color:var(--muted);font-size:13px;padding:8px 0">加载中…</div>';
-  api(`/stocks/${code}/history`).then(h => {
-    const entries = h.entries || [];
+  api(`/stocks/${code}/history`).then(hist => {
+    const entries = hist.entries || [];
     if (entries.length < 2) { slot.innerHTML = '<div class="seclbl">体检历史</div><div class="local-note" style="margin:0;padding:12px">多体检几次就会在这里显示健康分趋势（每天记一次）</div>'; return; }
     const scores = entries.map(e => e.health);
     const min = Math.min(...scores, 0), max = Math.max(...scores, 100);
