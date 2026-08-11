@@ -67,7 +67,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  server.listen(PORT, '127.0.0.1', () => console.log(`牛股体检站运行于 http://localhost:${PORT}`));
+  server.listen(PORT, '0.0.0.0', () => console.log(`牛股体检站运行于 http://localhost:${PORT}`));
   setInterval(() => evaluateAlerts().catch(error => console.error('提醒检查失败：', error.message)), 60000).unref();
   // 每日自动选股：交易日 15:35 后自动跑一次（引擎内部幂等判断）
   const screenTick = () => maybeRunDailyScreen().catch(error => console.error('[smart-screen] 自动选股失败：', error.message));
