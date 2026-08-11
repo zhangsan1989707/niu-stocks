@@ -546,7 +546,7 @@ async function screenPage() {
       : '';
     layout('回春法选股', `${sectorHtml ? '<div class="how"><b>🔥 板块热度</b></div>' + sectorHtml + '<div style="height:12px"></div>' : ''}<div class="how"><b>📋 这份名单怎么用</b><p>每天按趋势、MACD、均线与量价规则扫描预置股票池（覆盖白酒/新能源/半导体/消费电子/金融/医药/汽车/稀土/通信/军工/家电等板块龙头，约 40 只）；候选仅供技术研究，不构成投资建议。</p></div>
     <div class="custom-scan"><input id="scan-custom-codes" placeholder="📝 自定义扫描：输入 6 位代码，逗号分隔，如 600519,002594,300750"><button id="scan-custom-btn" class="outline" style="white-space:nowrap">⚡ 扫描自定义列表</button><span id="custom-status" style="display:none;font-size:12px;color:var(--blue)"></span></div>
-    ${card('', `<div class="filters"><input id="screen-filter" placeholder="🔍 输入代码/名称搜索"><button class="active">体检分</button></div><p class="report-note">🩺 候选按体检分排序，数据更新时间：${date(data.updatedAt)}</p><div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>今日</th><th>体检分</th><th>量比</th><th>结论</th><th>灯</th></tr></thead><tbody id="screen-rows"></tbody></table></div>`)}`);
+    ${card('', `<div class="filters"><input id="screen-filter" placeholder="🔍 输入代码/名称搜索"><button class="active">体检分</button></div><p class="report-note">🩺 候选按体检分排序，数据更新时间：${date(data.updatedAt)}${data.partial ? `；⚠️ ${data.failed}/${data.requested} 只行情获取失败，结果不完整` : ''}</p><div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>今日</th><th>体检分</th><th>量比</th><th>结论</th><th>灯</th></tr></thead><tbody id="screen-rows"></tbody></table></div>`)}`);
     let candidates = data.candidates;
     const render = rows => document.querySelector('#screen-rows').innerHTML = rows.length ? rows.map((x, i) => `<tr data-code="${x.code}"><td>${i+1}</td><td>${x.code}</td><td><b>${escape(x.name)}</b></td><td>${number(x.price)}</td><td class="${x.changePct>=0?'up':'down'}">${x.changePct>=0?'+':''}${number(x.changePct)}%</td><td><strong class="score mini">${x.score}</strong></td><td>${number(x.volumeRatio)}</td><td>${x.status}</td><td>${x.light === 'green' ? '🟢' : x.light === 'yellow' ? '🟡' : '🔴'}</td></tr>`).join('') : '<tr><td colspan="9">当前没有符合筛选条件的候选。</td></tr>';
     render(candidates);
@@ -696,7 +696,7 @@ async function backtestPage() {
   main.innerHTML = `
     <section class="card">
       <h2>策略回测</h2>
-      <p class="muted">基于 MACD 金叉/死叉信号模拟历史交易回测，评估策略在特定股票上的表现。结果仅供参考，不构成投资建议。</p>
+      <p class="muted">基于 MACD 金叉/死叉信号模拟历史交易回测，包含交易费用、滑点与买入持有基准比较；不等同于体检分策略验证。</p>
       <div class="bt-form">
         <div class="bt-field">
           <label class="cfg-label" for="bt-code">股票代码</label>
@@ -790,6 +790,10 @@ function renderBacktestResult(res, code, days) {
           <span class="bt-stat-val tnum" style="color:var(--green,#27ae60)">${res.maxDrawdown.toFixed(2)}%</span>
         </div>
         <div class="bt-stat">
+          <span class="bt-stat-label">买入持有基准</span>
+          <span class="bt-stat-val tnum">${res.benchmarkReturn >= 0 ? '+' : ''}${res.benchmarkReturn.toFixed(2)}%</span>
+        </div>
+        <div class="bt-stat">
           <span class="bt-stat-label">盈利次数</span>
           <span class="bt-stat-val tnum">${res.wins} / ${res.signals.filter(s => s.action === 'sell').length}</span>
         </div>
@@ -814,7 +818,7 @@ async function validatePage() {
   main.innerHTML = `
     <section class="card">
       <h2>体检分有效性验证</h2>
-      <p class="muted">将历史体检评分与后续实际涨跌对比，验证体检分的预测能力。按绿灯 / 黄灯 / 红灯分组统计平均涨跌和胜率。</p>
+      <p class="muted">将历史体检评分与后续实际涨跌对比，观察评分与未来表现的历史关联；样本不足时不作结论。</p>
       <div class="bt-form">
         <div class="bt-field">
           <label class="cfg-label" for="val-days">预测周期</label>
@@ -890,6 +894,7 @@ function renderValidateResult(res) {
     <section class="card">
       <h2>验证结果 · ${res.forwardDays} 天预测周期</h2>
       <p class="muted">总样本 ${res.samples} 条 · 整体上涨概率 <strong class="tnum">${res.totalWinRate}%</strong></p>
+      ${res.reliabilityNote ? `<p class="${res.reliable ? 'muted' : 'error'}">${escape(res.reliabilityNote)}</p>` : ''}
       <div class="bt-stats">${groupCards}</div>
     </section>
     ${res.detail && res.detail.length > 0 ? `
@@ -1140,7 +1145,7 @@ async function alertsPage() {
     rules = data.rules || []; pending = data.pending || []; unreadCount = data.unreadCount || 0;
   } catch { /* 首次访问时文件未创建，正常 */ }
   layout('价格提醒', `
-    <p class="intro">为关注的股票设置价格/涨跌幅提醒，触发后会在「待读提醒」中显示（5 分钟内同条规则不重复触发）。数据保存在本机。</p>
+    <p class="intro">为关注的股票设置价格/涨跌幅提醒。服务运行期间会每分钟检查一次，触发后保存到「待读提醒」；浏览器开启通知后可弹窗提醒（同条规则 5 分钟内不重复）。</p>
     <div class="port-toolbar">
       <button class="primary" id="addAlertBtn">＋ 新建提醒</button>
       <button class="outline" id="refreshAlerts">↻ 刷新</button>
@@ -1301,6 +1306,7 @@ async function loadIndices() {
     const { indices } = await api('/indices');
     if (!indices || !indices.length) { bar.style.display = 'none'; return; }
     bar.innerHTML = indices.map(idx => {
+      if (idx.available === false) return `<div class="idx-card unavailable"><span class="idx-name">${escape(idx.name)}</span><span class="idx-chg">行情暂不可用</span></div>`;
       const cls = idx.changePct > 0 ? 'up' : idx.changePct < 0 ? 'down' : '';
       const arrow = idx.changePct > 0 ? '▲' : idx.changePct < 0 ? '▼' : '—';
       return `<div class="idx-card ${cls}">
@@ -1309,7 +1315,7 @@ async function loadIndices() {
         <span class="idx-chg">${arrow} ${Math.abs(idx.changePct).toFixed(2)}%</span>
       </div>`;
     }).join('');
-  } catch { bar.style.display = 'none'; }
+  } catch { bar.style.display = ''; bar.innerHTML = '<div class="idx-card unavailable"><span class="idx-chg">指数行情暂不可用</span></div>'; }
 }
 
 function router() {

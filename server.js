@@ -8,7 +8,7 @@ const { readFile } = require('node:fs/promises');
 const { join, extname } = require('node:path');
 
 const { STATIC, MIME, json, body, route, log, logFallback, market, number } = require('./lib/server/utils');
-const { handleApi } = require('./lib/server/routes');
+const { handleApi, evaluateAlerts } = require('./lib/server/routes');
 const { reportFrom, stockReport, stockReportWithHistory, calcPosition, runBacktest } = require('./lib/server/report');
 const { loadStocks, addStock, removeStock, getSector } = require('./lib/server/stocks');
 const { getIndices, quote, klines, remoteSearch, checkHistory } = require('./lib/server/market');
@@ -29,6 +29,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) {
       const handled = await handleApi(req, res, url, start);
       if (handled) return;
+      return json(res, 404, { error: 'API 未找到' });
     }
 
     // 静态文件
@@ -53,17 +54,21 @@ const server = http.createServer(async (req, res) => {
     const status = error.message?.includes('timeout') || error.name === 'TimeoutError' ? 504
       : error.message?.includes('未找到') ? 404
       : error.message?.includes('请求格式') ? 400
+      : error.message?.includes('请求体过大') ? 413
       : 502;
     log(req.method, url.pathname, status, ms);
     const errMsg = status === 504 ? '行情服务响应超时，请稍后重试'
       : status === 404 ? error.message
-      : status === 400 ? error.message
+      : status === 400 || status === 413 ? error.message
       : error.message || '服务暂不可用，请稍后重试';
     json(res, status, { error: errMsg, source: 'error' });
   }
 });
 
-if (require.main === module) server.listen(PORT, () => console.log(`牛股体检站运行于 http://localhost:${PORT}`));
+if (require.main === module) {
+  server.listen(PORT, '127.0.0.1', () => console.log(`牛股体检站运行于 http://localhost:${PORT}`));
+  setInterval(() => evaluateAlerts().catch(error => console.error('提醒检查失败：', error.message)), 60000).unref();
+}
 
 // 保持与原 server.js 完全一致的导出（测试兼容）
 module.exports = {
