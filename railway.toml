@@ -1,0 +1,25 @@
+# Railway 部署配置
+# 文档: https://docs.railway.com/reference/railway-toml
+
+[build]
+# 使用 Nixpacks 默认构建（基于 package.json 的 start 脚本）
+builder = "nixpacks"
+
+[deploy]
+# 服务启动命令
+startCommand = "node server.js"
+# 健康检查：访问首页，Railway 会自动注入 PORT
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# 挂载持久化 Volume 到 /data
+# Railway 会注入环境变量 DATA_DIR，代码已适配读取该变量
+[[mounts]]
+# Volume 在容器内的挂载点
+directory = "/data"
+# 环境变量名，容器启动后该变量值为挂载的卷路径
+env = "DATA_DIR"
+# Volume 名称（在 Railway 控制台可见，首次部署自动创建）
+name = "niu-stocks-data"
