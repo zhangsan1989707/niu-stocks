@@ -955,18 +955,7 @@ document.addEventListener('touchstart', e => {
 
 
 // --- 工作台：持仓管理（P0）---
-// 指数栏（调用 /api/indices）
-async function renderIndices() {
-  try {
-    const data = await api('/indices');
-    if (!data.indices || !data.indices.length) return '';
-    return `<div class="indices-bar">${data.indices.map(idx => {
-      const cls = idx.changePct >= 0 ? 'up' : 'down';
-      return `<div class="idx-card ${cls}"><span class="idx-name">${escape(idx.name)}</span><b class="idx-price">${number(idx.price)}</b><em class="idx-pct">${idx.changePct >= 0 ? '+' : ''}${number(idx.changePct)}%</em></div>`;
-    }).join('')}</div>`;
-  } catch { return ''; }
-}
-
+// (indices bar rendered by loadIndices)
 // 体检历史迷你折线（调用 /api/stocks/{code}/history）
 function renderCheckHistory(code) {
   const slot = document.createElement('div');
@@ -995,7 +984,6 @@ function renderCheckHistory(code) {
 async function portfolioPage() {
   loading();
   try {
-    renderIndices().then(html => { const s = document.querySelector('#indices-slot'); if (s) s.innerHTML = html; });
     const data = await api('/portfolio');
     const { positions, summary } = data;
     const fmt = (v, digits = 2) => Number(v || 0).toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -1027,7 +1015,7 @@ async function portfolioPage() {
       </tr>`).join('') : '<tr><td colspan="9" class="empty">还没有持仓，点击右上角「添加持仓」开始记录</td></tr>';
 
     layout('工作台 · 我的持仓', `
-      <div id="indices-slot" style="margin:0 0 14px"></div>
+      <div id="indices-bar" style="margin:0 0 14px"></div>
       <div class="port-toolbar">
         <button class="primary" id="addPosBtn">＋ 添加持仓</button>
         <button class="outline" id="checkAllPos">⚡ 体检全部持仓</button>
