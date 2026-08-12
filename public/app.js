@@ -721,7 +721,7 @@ function renderSmartPage(data) {
       </div>
     </div>`).join('')}</div>` : '<p class="report-note">今日没有通过全部筛选与风险否决的股票。</p>';
   const topTable = data.top.length ? (isMobile ? smartCards : `<p class="report-note">🖱️ 悬停行可看五路信号明细，点击行进入个股体检。入选分 50 为中性，越高越强。</p>
-  <div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>今日</th><th>入选分</th><th>体检分</th><th>RPS60</th><th>RPS120</th><th>120日</th><th>成交(亿)</th><th>量比</th><th>灯</th><th>操作</th></tr></thead><tbody>${topRows}</tbody></table></div>`) : '<p class="report-note">今日没有通过全部筛选与风险否决的股票。</p>';
+  <div class="table-wrap wide"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>今日</th><th>入选分</th><th>体检分</th><th>RPS60</th><th>RPS120</th><th>120日</th><th>成交(亿)</th><th>量比</th><th>灯</th><th>操作</th></tr></thead><tbody>${topRows}</tbody></table></div>`) : '<p class="report-note">今日没有通过全部筛选与风险否决的股票。</p>';
 
 
   const vetoRows = data.vetoed.length ? data.vetoed.map(v => `<tr data-code="${v.code}"><td>${v.code}</td><td>${escape(v.name)}</td><td><strong class="score mini">${v.score}</strong></td><td style="color:var(--muted)">${v.vetoes.map(escape).join('；')}</td></tr>`).join('') : '<tr><td colspan="4">今日没有被风险否决的高分股</td></tr>';
@@ -794,6 +794,49 @@ function ztSummaryCards(summary) {
   </div>`;
 }
 
+// 导出涨停池 CSV（带 UTF-8 BOM，Excel 双击打开不乱码）
+function exportZTPoolCSV(pool, summary, date) {
+  const esc = v => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [];
+  lines.push('A股涨停股池 ' + date + ' 共' + pool.length + '只');
+  lines.push('涨停总数,' + (summary.total || 0));
+  lines.push('最高连板,' + (summary.maxLbc || 0) + '板');
+  lines.push('连板>=3,' + (summary.lbc3 || 0));
+  lines.push('连板>=5,' + (summary.lbc5 || 0));
+  lines.push('炸板=0,' + (summary.zbc0 || 0));
+  lines.push('龙虎榜,' + (summary.lhbCount || 0));
+  lines.push('60日新高,' + (summary.newHighCount || 0));
+  lines.push('');
+  const headers = ['序号', '代码', '名称', '板块', '行业', '连板数', '龙虎榜', '涨跌幅%', '最新价', '成交额(亿)', '流通市值(亿)', '总市值(亿)', '换手率%', '量比', '封单金额(亿)', '封单/成交', '首次封板', '最后封板', '炸板次数', '涨停统计', '60日新高'];
+  lines.push(headers.join(','));
+  pool.forEach((x, i) => {
+    lines.push([i + 1, x.code, esc(x.name), esc(x.board), esc(x.industry), x.lbc, x.lhb ? '是' : '', x.zdp, x.price, x.amountYi, x.ltszYi, x.tshareYi, x.hs, x.volumeRatio ?? '', x.fundYi, x.fundRatio ?? '', x.firstTime, x.lastTime, x.zbc, esc(x.zttj), x.newHigh === true ? '是' : ''].join(','));
+  });
+  lines.push('');
+  lines.push('连板梯队');
+  const ladder = {};
+  pool.forEach(x => { ladder[x.lbc] = (ladder[x.lbc] || 0) + 1; });
+  Object.entries(ladder).sort((a, b) => Number(b[0]) - Number(a[0])).forEach(([lb, cnt]) => {
+    const names = pool.filter(x => x.lbc === Number(lb)).map(x => x.name).join('、');
+    lines.push(lb + '板,' + cnt + '只,' + esc(names));
+  });
+  lines.push('');
+  lines.push('数据来源：东方财富公开接口，仅供研究，不构成投资建议。');
+  const csv = '\ufeff' + lines.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'A股涨停股池_' + date + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
 function renderZTPoolPage(data) {
   let pool = data.pool || [];
   const summary = data.summary;
@@ -804,6 +847,7 @@ function renderZTPoolPage(data) {
       <span id="zt-board-filters" style="display:flex;gap:6px;flex-wrap:wrap">${boardHtml}</span>
       <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)"><input type="checkbox" id="zt-lhb"> 仅龙虎榜</label>
       <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)"><input type="checkbox" id="zt-high"> 仅60日新高</label>
+      <button class="outline" id="zt-export">⬇ 导出CSV</button>
       <button class="outline" id="zt-refresh" style="margin-left:auto">↻ 刷新</button>
     </div>
     ${ztSummaryCards(summary)}
@@ -830,12 +874,13 @@ function renderZTPoolPage(data) {
         <div class="smart-card" data-code="${x.code}">
           <div style="display:flex;align-items:center;gap:8px"><b>${escape(x.name)}</b><small style="color:var(--muted)">${x.code}</small><span style="margin-left:auto" class="lightdot ${x.lbc >= 3 ? 'red' : 'yellow'}">${x.lbc}板</span></div>
           <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)">
-            <span>${escape(x.board)}</span><span>封单比 ${x.fundRatio ?? '—'}</span><span>换手 ${x.hs}%</span><span>量比 ${x.volumeRatio ?? '—'}</span>
+            <span>${escape(x.board)}</span><span>${escape(x.industry)}</span><span class="up">+${x.zdp}%</span><span>封单比 ${x.fundRatio ?? '—'}</span>
+            <span>换手 ${x.hs}%</span><span>量比 ${x.volumeRatio ?? '—'}</span><span>炸板 ${x.zbc}</span><span>首封 ${x.firstTime}</span>
             <span>${x.lhb ? '🔥龙虎榜' : ''}${x.newHigh === true ? ' 📈新高' : ''}</span>
           </div>
         </div>`).join('')}</div>` : '<p class="empty">无符合条件的涨停股</p>';
     } else {
-      document.querySelector('#zt-result').innerHTML = `<div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>板块</th><th>行业</th><th>连板</th><th>龙虎榜</th><th>涨跌幅</th><th>最新价</th><th>成交额(亿)</th><th>流通市值(亿)</th><th>换手%</th><th>量比</th><th>封单(亿)</th><th>封单/成交</th><th>首封</th><th>末封</th><th>炸板</th><th>涨停统计</th><th>新高</th></tr></thead><tbody>${rows.map((x, i) => `<tr data-code="${x.code}">
+      document.querySelector('#zt-result').innerHTML = `<div class="table-wrap wide"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>板块</th><th>行业</th><th>连板</th><th>龙虎榜</th><th>涨跌幅</th><th>最新价</th><th>成交额(亿)</th><th>流通市值(亿)</th><th>换手%</th><th>量比</th><th>封单(亿)</th><th>封单/成交</th><th>首封</th><th>末封</th><th>炸板</th><th>涨停统计</th><th>新高</th></tr></thead><tbody>${rows.map((x, i) => `<tr data-code="${x.code}">
         <td>${i + 1}</td><td>${x.code}</td><td><b>${escape(x.name)}</b></td><td>${escape(x.board)}</td><td>${escape(x.industry)}</td>
         <td><strong class="score">${x.lbc}板</strong></td>
         <td>${x.lhb ? '<b style="color:var(--red)">🔥</b>' : ''}</td>
@@ -865,6 +910,7 @@ function renderZTPoolPage(data) {
     btn.classList.add('active');
     applyFilter();
   });
+  document.querySelector('#zt-export').onclick = () => exportZTPoolCSV(pool, summary, data.date);
   document.querySelector('#zt-refresh').onclick = async () => {
     notice('正在刷新…');
     try { const fresh = await api('/ztpool?force=1'); pool = fresh.pool || []; renderZTPoolPage(fresh); } catch (e) { notice(e.message); }
@@ -1384,7 +1430,7 @@ async function portfolioPage() {
       </div>
       ${summaryCards}
       <div id="port-check-slot"></div>
-      ${card('持仓明细', `<div class="table-wrap"><table><thead><tr><th>股票</th><th>持仓数</th><th>成本价</th><th>现价</th><th>浮动盈亏</th><th>收益率</th><th>仓位</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table></div>`, 'report-card')}
+      ${card('持仓明细', `<div class="table-wrap wide"><table><thead><tr><th>股票</th><th>持仓数</th><th>成本价</th><th>现价</th><th>浮动盈亏</th><th>收益率</th><th>仓位</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table></div>`, 'report-card')}
       ${card('交易流水', '<div id="trade-list"><p class="empty">加载中…</p></div>')}
       <div id="netvalue-slot"></div>
       <div id="addPosModal" class="modal" style="display:none">

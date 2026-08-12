@@ -753,7 +753,13 @@ tbody tr:nth-child(even) { background: rgba(238,241,246,.5); }
 tr[data-code] { cursor: pointer; transition: background .12s var(--ease); }
 tr[data-code]:hover { background: var(--blue-soft); }
 
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+.table-wrap::-webkit-scrollbar { height: 8px; }
+.table-wrap::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+[data-theme="dark"] .table-wrap::-webkit-scrollbar-thumb { background: #475569; }
+.table-wrap table { min-width: 100%; }
+/* 宽表：禁止换行并撑开容器实现横向滚动（涨停池等 20 列大表） */
+.table-wrap.wide table { min-width: max-content; white-space: nowrap; }
 
 /* ========== Steps & Rules ========== */
 .steps { display: flex; gap: 14px; margin: 22px 0; }
@@ -1265,6 +1271,10 @@ footer {
 .bt-disclaimer { margin-top: 12px; font-size: 12px; }
 
 @media (max-width: 760px) {
+  header { flex-wrap: nowrap; }
+  nav { overflow-x: auto; max-width: calc(100vw - 140px); white-space: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  nav::-webkit-scrollbar { display: none; }
+  nav a { display: inline-block !important; flex: none; }
   .bt-stats { grid-template-columns: repeat(2, 1fr); }
   .bt-stat-val { font-size: 18px; }
   .bt-form { flex-direction: column; align-items: stretch; }
