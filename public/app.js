@@ -794,43 +794,49 @@ function ztSummaryCards(summary) {
   </div>`;
 }
 
-// 导出涨停池 CSV（带 UTF-8 BOM，Excel 双击打开不乱码）
-function exportZTPoolCSV(pool, summary, date) {
-  const esc = v => {
-    if (v == null) return '';
-    const s = String(v);
-    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  };
-  const lines = [];
-  lines.push('A股涨停股池 ' + date + ' 共' + pool.length + '只');
-  lines.push('涨停总数,' + (summary.total || 0));
-  lines.push('最高连板,' + (summary.maxLbc || 0) + '板');
-  lines.push('连板>=3,' + (summary.lbc3 || 0));
-  lines.push('连板>=5,' + (summary.lbc5 || 0));
-  lines.push('炸板=0,' + (summary.zbc0 || 0));
-  lines.push('龙虎榜,' + (summary.lhbCount || 0));
-  lines.push('60日新高,' + (summary.newHighCount || 0));
-  lines.push('');
-  const headers = ['序号', '代码', '名称', '板块', '行业', '连板数', '龙虎榜', '涨跌幅%', '最新价', '成交额(亿)', '流通市值(亿)', '总市值(亿)', '换手率%', '量比', '封单金额(亿)', '封单/成交', '首次封板', '最后封板', '炸板次数', '涨停统计', '60日新高'];
-  lines.push(headers.join(','));
-  pool.forEach((x, i) => {
-    lines.push([i + 1, x.code, esc(x.name), esc(x.board), esc(x.industry), x.lbc, x.lhb ? '是' : '', x.zdp, x.price, x.amountYi, x.ltszYi, x.tshareYi, x.hs, x.volumeRatio ?? '', x.fundYi, x.fundRatio ?? '', x.firstTime, x.lastTime, x.zbc, esc(x.zttj), x.newHigh === true ? '是' : ''].join(','));
-  });
-  lines.push('');
-  lines.push('连板梯队');
+// 导出涨停池 XLSX（零依赖生成器，3 个 sheet：明细 / 连板梯队 / 情绪概览）
+function exportZTPoolXLSX(pool, summary, date) {
+  const headers = ['序号', '代码', '名称', '板块', '所属行业', '连板数', '龙虎榜', '涨跌幅%', '最新价', '成交额(亿)', '流通市值(亿)', '总市值(亿)', '换手率%', '量比', '封单金额(亿)', '封单/成交额', '首次封板', '最后封板', '炸板次数', '涨停统计', '是否60日新高'];
+  const rows = pool.map((x, i) => [
+    i + 1, x.code, x.name, x.board, x.industry, x.lbc, x.lhb ? '是' : '',
+    x.zdp, x.price, x.amountYi, x.ltszYi, x.tshareYi, x.hs,
+    x.volumeRatio ?? '', x.fundYi, x.fundRatio ?? '',
+    x.firstTime, x.lastTime, x.zbc, x.zttj, x.newHigh === true ? '是' : '',
+  ]);
+  // 连板梯队
   const ladder = {};
   pool.forEach(x => { ladder[x.lbc] = (ladder[x.lbc] || 0) + 1; });
+  const ladderRows = [['连板数', '数量', '占比', '股票代码及名称']];
   Object.entries(ladder).sort((a, b) => Number(b[0]) - Number(a[0])).forEach(([lb, cnt]) => {
-    const names = pool.filter(x => x.lbc === Number(lb)).map(x => x.name).join('、');
-    lines.push(lb + '板,' + cnt + '只,' + esc(names));
+    const names = pool.filter(x => x.lbc === Number(lb)).map(x => x.code + ' ' + x.name).join('、');
+    ladderRows.push([Number(lb), cnt, (cnt / pool.length * 100).toFixed(1) + '%', names]);
   });
-  lines.push('');
-  lines.push('数据来源：东方财富公开接口，仅供研究，不构成投资建议。');
-  const csv = '\ufeff' + lines.join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  // 情绪概览
+  const boards = summary.boards || {};
+  const statRows = [
+    ['指标', '数值'],
+    ['涨停总数', pool.length],
+    ['最高连板', (summary.maxLbc || 0) + ' 板'],
+    ['连板≥3', summary.lbc3 || 0],
+    ['连板≥5', summary.lbc5 || 0],
+    ['炸板次数=0', summary.zbc0 || 0],
+    ['炸板次数≥3', summary.zbc3 || 0],
+    ['上龙虎榜', summary.lhbCount || 0],
+    ['创60日新高', summary.newHighCount || 0],
+    ['板块分布', Object.entries(boards).map(([k, v]) => k + ': ' + v + '只').join(' | ')],
+    ['', ''],
+    ['数据日期', date],
+    ['数据来源', '东方财富公开接口，仅供研究，不构成投资建议。'],
+  ];
+  const sheets = [
+    { name: '涨停股一览', rows: [headers, ...rows], colWidths: [6, 10, 10, 12, 10, 8, 8, 10, 8, 12, 12, 12, 10, 8, 12, 10, 12, 12, 8, 10, 10] },
+    { name: '连板梯队', rows: ladderRows, colWidths: [10, 10, 10, 80] },
+    { name: '市场情绪概览', rows: statRows, colWidths: [25, 80] },
+  ];
+  const blob = XlsxBuilder.buildXlsx(sheets);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'A股涨停股池_' + date + '.csv';
+  a.download = 'A股涨停股池_' + date + '.xlsx';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -847,7 +853,7 @@ function renderZTPoolPage(data) {
       <span id="zt-board-filters" style="display:flex;gap:6px;flex-wrap:wrap">${boardHtml}</span>
       <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)"><input type="checkbox" id="zt-lhb"> 仅龙虎榜</label>
       <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)"><input type="checkbox" id="zt-high"> 仅60日新高</label>
-      <button class="outline" id="zt-export">⬇ 导出CSV</button>
+      <button class="outline" id="zt-export">⬇ 导出Excel</button>
       <button class="outline" id="zt-refresh" style="margin-left:auto">↻ 刷新</button>
     </div>
     ${ztSummaryCards(summary)}
@@ -910,7 +916,7 @@ function renderZTPoolPage(data) {
     btn.classList.add('active');
     applyFilter();
   });
-  document.querySelector('#zt-export').onclick = () => exportZTPoolCSV(pool, summary, data.date);
+  document.querySelector('#zt-export').onclick = () => exportZTPoolXLSX(pool, summary, data.date);
   document.querySelector('#zt-refresh').onclick = async () => {
     notice('正在刷新…');
     try { const fresh = await api('/ztpool?force=1'); pool = fresh.pool || []; renderZTPoolPage(fresh); } catch (e) { notice(e.message); }
