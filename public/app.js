@@ -1688,3 +1688,25 @@ const AlertNotifier = {
 };
 
 AlertNotifier.init();
+
+// --- 深色/浅色模式切换（P2-10）---
+(function initTheme() {
+  const saved = localStorage.getItem('leostocks_theme');
+  const btn = document.getElementById('theme-toggle');
+  if (saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    if (btn) btn.textContent = '☀️';
+  }
+  if (btn) btn.onclick = () => {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('leostocks_theme', 'light');
+      btn.textContent = '🌙';
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('leostocks_theme', 'dark');
+      btn.textContent = '☀️';
+    }
+  };
+})();

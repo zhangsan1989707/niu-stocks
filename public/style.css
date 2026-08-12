@@ -37,7 +37,64 @@
   --shadow-lg: 0 8px 24px -4px rgba(26,35,50,.1), 0 4px 8px -2px rgba(26,35,50,.04);
   --shadow-xl: 0 16px 40px -8px rgba(26,35,50,.12), 0 8px 16px -4px rgba(26,35,50,.04);
 
-  /* Radius scale */
+  /* ========== Dark Theme (P2-10) ========== */
+[data-theme="dark"] {
+  --ink: #e2e8f0;
+  --ink-soft: #cbd5e1;
+  --muted: #94a3b8;
+  --faint: #64748b;
+  --ghost: #475569;
+
+  --blue: #7c9bd6;
+  --blue-dark: #a5bce4;
+  --blue-soft: #1e293b;
+  --blue-line: #334155;
+  --blue-glow: rgba(124,155,214,.18);
+
+  --line: #334155;
+  --line-soft: #283548;
+  --bg: #0f172a;
+  --bg-warm: #1e293b;
+  --card: #1a2436;
+
+  --red: #f87171;
+  --red-soft: #3b1d1d;
+  --red-line: #5b2a2a;
+  --good: #4ade80;
+  --good-soft: #16301f;
+  --good-line: #274a32;
+  --amber: #fbbf24;
+  --amber-soft: #3a2d12;
+  --amber-line: #57431a;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow: 0 3px 8px -2px rgba(0,0,0,.5);
+  --shadow-lg: 0 8px 24px -4px rgba(0,0,0,.6);
+  --shadow-xl: 0 16px 40px -8px rgba(0,0,0,.7);
+}
+
+/* 深色下部分硬编码浅色背景的元素兜底 */
+[data-theme="dark"] body { background: linear-gradient(180deg, #0f172a 0, #0f172a 40%, #131c2e 100%); }
+[data-theme="dark"] .chart svg { background: #1a2436; }
+[data-theme="dark"] .dims { background: #16202f; }
+[data-theme="dark"] .metric { background: #16202f; }
+[data-theme="dark"] table th { background: #16202f; }
+[data-theme="dark"] .table-wrap tr[data-code]:hover { background: #1e293b; }
+[data-theme="dark"] .calcnote { background: #16202f; }
+[data-theme="dark"] .how { background: #1e293b; }
+[data-theme="dark"] .steps article, [data-theme="dark"] .rule-grid > div, [data-theme="dark"] .book-card, [data-theme="dark"] .concept, [data-theme="dark"] .faq-item { background: #1e293b; }
+[data-theme="dark"] input, [data-theme="dark"] select, [data-theme="dark"] textarea { background: #1a2436; color: var(--ink); }
+[data-theme="dark"] .suggestions button { background: #1a2436; }
+[data-theme="dark"] .suggestions button:hover { background: #1e293b; }
+[data-theme="dark"] .patgrid .pchip { background: #16202f; }
+[data-theme="dark"] .dimscan .ic { background: #283548; }
+[data-theme="dark"] .port-result, [data-theme="dark"] .favrow { background: #1a2436 !important; border-color: #334155 !important; }
+[data-theme="dark"] .trade-item { border-color: #283548; }
+[data-theme="dark"] .indices-bar .idx-card { background: #1a2436; }
+[data-theme="dark"] .scan, [data-theme="dark"] .card { background: #1a2436; border-color: #334155; }
+[data-theme="dark"] .cp-btn { background: #1a2436; }
+
+/* Radius scale */
   --radius: 14px;
   --radius-sm: 10px;
   --radius-xs: 8px;
