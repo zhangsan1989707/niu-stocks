@@ -505,6 +505,11 @@ small { color: var(--faint); font-weight: 400; }
 /* ========== Report Grid ========== */
 .report-grid .card { margin: 0; }
 
+.chart-periods { display: flex; gap: 6px; margin-bottom: 10px; }
+.cp-btn { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 8px; padding: 4px 14px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+.cp-btn:hover { border-color: var(--blue); color: var(--blue); }
+.cp-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
 .chart svg {
   display: block;
   width: 100%;

@@ -40,7 +40,7 @@ function renderMurphy(m) {
     const badge = f.pts > 0 ? '+' + f.pts : f.pts < 0 ? '' + f.pts : '·';
     const desc = INDICATOR_DESC[f.name];
     const tt = desc ? `data-tooltip="${desc.meaning}" data-tooltip-signal="${desc.hint}"` : '';
-    return `<div class="dimrow2 ${cls} has-tip" ${tt}><span class="fpts ${f.pts ? '' : 'idle'}">${badge}</span><span class="dn">${escape(f.name)}</span><span class="dwhy">${escape(f.plain)}</span></div>`;
+    return `<div class="dimrow2 ${cls} has-tip" ${tt}><span class="fpts ${f.pts ? '' : 'idle'}">${badge}</span><span class="dn">${escape(f.name)}</span><span class="dwhy">${escape(f.plain)}</span></div>${statsHtml}`;
   }).join('');
   return `<div class="seclbl">摆动指标组 · 墨菲《金融市场技术分析》<span style="font-weight:400;color:#9098a9;font-size:12px">（${m.factors.length} 项，本组 ${m.pts > 0 ? '+' + m.pts : m.pts} 分）</span></div><div class="dims">${rows}</div>`;
 }
@@ -73,6 +73,70 @@ function renderMultiPeriod(mp) {
 }
 
 // --- 增强 K 线图 ---
+// --- K线周期聚合（日→周/月，前端版）---
+function aggregateBars(bars, period) {
+  if (!bars || !bars.length) return [];
+  if (period === 'day') return bars.map(b => ({ ...b }));
+  const groups = [];
+  let cur = null;
+  for (const b of bars) {
+    let key;
+    if (period === 'week') {
+      const d = new Date(b.d + 'T00:00:00');
+      const offset = d.getDay() === 0 ? -6 : 1 - d.getDay();
+      const ws = new Date(d);
+      ws.setDate(d.getDate() + offset);
+      key = ws.toISOString().slice(0, 10);
+    } else {
+      key = b.d.slice(0, 7); // 月
+    }
+    if (!cur || cur.key !== key) {
+      if (cur) delete cur.key;
+      cur = { key, d: key, o: b.o, c: b.c, h: b.h, l: b.l, v: b.v };
+      groups.push(cur);
+    } else {
+      cur.c = b.c;
+      cur.h = Math.max(cur.h, b.h);
+      cur.l = Math.min(cur.l, b.l);
+      cur.v += b.v;
+    }
+  }
+  if (cur) delete cur.key;
+  return groups;
+}
+
+// --- 周期切换版图表（周/月只画 K 线 + 成交量，不叠加日线指标）---
+function drawChartPeriod(bars, period) {
+  if (!bars || bars.length < 2) return '<div class="empty">暂无足够K线</div>';
+  const W = 760, padL = 6, padR = 46, show = bars.length;
+  const priceT = 10, priceB = 196, volT = 212, volB = 270, dateY = 285, H = 298;
+  let mn = Math.min(...bars.map(b => b.l));
+  let mx = Math.max(...bars.map(b => b.h));
+  const pad = (mx - mn) * 0.06; mn -= pad; mx += pad;
+  const plotW = W - padL - padR, step = plotW / show;
+  const x = i => padL + (i + 0.5) / show * plotW;
+  const y = p => priceT + (mx - p) / (mx - mn) * (priceB - priceT);
+  const cw = Math.max(3, step * 0.62);
+  const vmax = Math.max(1, ...bars.map(b => b.v || 0));
+  const vy = v => volB - (v || 0) / vmax * (volB - volT);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${period}K线图">`;
+  bars.forEach((b, i) => {
+    const up = b.c >= b.o, col = up ? '#d8584d' : '#3a9e6e', xc = x(i);
+    s += `<line x1="${xc}" y1="${y(b.h)}" x2="${xc}" y2="${y(b.l)}" stroke="${col}" stroke-width="1"/>`;
+    const yo = y(b.o), yc = y(b.c);
+    s += `<rect x="${xc-cw/2}" y="${Math.min(yo,yc)}" width="${cw}" height="${Math.max(1.5,Math.abs(yo-yc))}" fill="${col}"/>`;
+  });
+  s += `<line x1="${padL}" y1="${volT-7}" x2="${W-padR}" y2="${volT-7}" stroke="#e7e9ef" stroke-width="1"/><text x="${padL}" y="${volT+2}" font-size="9.5" fill="#9aa6bd">成交量</text>`;
+  bars.forEach((b, i) => {
+    const up = b.c >= b.o, col = up ? '#d8584d' : '#3a9e6e', xc = x(i);
+    const vh = volB - vy(b.v);
+    s += `<rect x="${(xc-cw/2).toFixed(1)}" y="${vy(b.v).toFixed(1)}" width="${cw.toFixed(1)}" height="${Math.max(0.6,vh).toFixed(1)}" fill="${col}" opacity=".82"/>`;
+  });
+  const dix = [...new Set([0, Math.floor(show/3), Math.floor(2*show/3), show-1])];
+  dix.forEach(i => { const dd = (bars[i].d || '').slice(period === 'month' ? 0 : 5); if (dd) s += `<text x="${x(i).toFixed(1)}" y="${dateY}" font-size="9" fill="#9aa6bd" text-anchor="middle">${dd}</text>`; });
+  return s + '</svg>';
+}
+
 function drawChart(chart) {
   if (!chart || !chart.bars || chart.bars.length < 2) return '<div class="empty">暂无足够K线</div>';
   const bars = chart.bars, ma60 = chart.ma60 || [], support = chart.support, resistance = chart.resistance;
@@ -380,7 +444,9 @@ function renderReport(data) {
     <div class="health ${data.light}"><div class="hnum">${data.health}<small>/100</small></div><div class="hmid"><div class="hband">技术健康分 · ${data.band}</div><div class="hbar"><span class="mk" style="left:${data.health}%"></span></div><div class="hticks"><span>0 危险</span><span>45</span><span>65</span><span>健康 100</span></div></div></div>
     <div class="calcnote">${calcNote}</div>
     <div class="checkdone">✓ 已逐项核验 ${data.pat_scanned || 29} 种蜡烛形态 ＋ 12 类技术维度</div>
-    <div class="report-grid"><article class="card"><h2>趋势与价格</h2><div id="chart" class="chart"></div>
+    <div class="report-grid"><article class="card"><h2>趋势与价格</h2>
+    <div class="chart-periods" style="display:flex;gap:6px;margin-bottom:10px"><button class="cp-btn active" data-period="day">日线</button><button class="cp-btn" data-period="week">周线</button><button class="cp-btn" data-period="month">月线</button></div>
+    <div id="chart" class="chart"></div>
     <div class="legend"><i><span style="background:#d8584d"></span>红=涨</i><i><span style="background:#3a9e6e"></span>绿=跌</i><i><span class="line" style="background:#4f6cae"></span>蓝线=MA60</i><i><span class="line" style="background:#c9922e"></span>金线=均量5</i><i><span style="background:#d8584d"></span>红虚线=支撑</i><i><span style="background:#9aa6bd"></span>灰虚线=压力</i></div>
     <div class="metrics">
       <div class="metric"><div class="ml">最新收盘</div><div class="mv">${number(data.last_close || data.quote.price)}</div><div class="ms">${data.quote.changePct >= 0 ? '+' : ''}${number(data.quote.changePct)}%</div></div>
@@ -414,7 +480,19 @@ function renderReport(data) {
     <div id="favorites"></div>`);
   document.querySelector('#back').onclick = () => { location.hash = '#/check'; checkPage(); };
   const chartEl = document.querySelector('#chart');
-  if (chartEl) chartEl.innerHTML = drawChart(data.chart);
+  if (chartEl) {
+    chartEl.innerHTML = drawChart(data.chart);
+    // 周期切换
+    const periodBtns = document.querySelectorAll('.cp-btn');
+    periodBtns.forEach(btn => btn.onclick = () => {
+      periodBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const period = btn.dataset.period;
+      if (period === 'day') { chartEl.innerHTML = drawChart(data.chart); return; }
+      const bars = aggregateBars((data.candles || []).map(c => ({ d: c.date, o: c.open, c: c.close, h: c.high, l: c.low, v: c.volume })), period);
+      chartEl.innerHTML = drawChartPeriod(bars, period);
+    });
+  }
   document.querySelector('#favorite')?.addEventListener('click', async () => { try { await api('/favorites', { method:'POST', body:JSON.stringify({code:data.code,name:data.name}) }); notice('已加入自选', true); } catch (e) { notice(e.message); } });
   renderFavorites();
 }
@@ -612,9 +690,10 @@ function renderSmartPage(data) {
     <td class="${t.ret120 >= 0 ? 'up' : 'down'}">${t.ret120 >= 0 ? '+' : ''}${number(t.ret120)}%</td>
     <td>${number(t.amountYi)}</td><td>${number(t.volumeRatio)}</td>
     <td>${t.light === 'green' ? '🟢' : t.light === 'yellow' ? '🟡' : '🔴'}</td>
+    <td><button class="mini" data-fav="${t.code}" data-favname="${escape(t.name)}">⭐自选</button></td>
   </tr>`).join('');
   const topTable = data.top.length ? `<p class="report-note">🖱️ 悬停行可看五路信号明细，点击行进入个股体检。入选分 50 为中性，越高越强。</p>
-  <div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>今日</th><th>入选分</th><th>体检分</th><th>RPS60</th><th>RPS120</th><th>120日</th><th>成交(亿)</th><th>量比</th><th>灯</th></tr></thead><tbody>${topRows}</tbody></table></div>` : '<p class="report-note">今日没有通过全部筛选与风险否决的股票。</p>';
+  <div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>今日</th><th>入选分</th><th>体检分</th><th>RPS60</th><th>RPS120</th><th>120日</th><th>成交(亿)</th><th>量比</th><th>灯</th><th>操作</th></tr></thead><tbody>${topRows}</tbody></table></div>` : '<p class="report-note">今日没有通过全部筛选与风险否决的股票。</p>';
 
   const vetoRows = data.vetoed.length ? data.vetoed.map(v => `<tr data-code="${v.code}"><td>${v.code}</td><td>${escape(v.name)}</td><td><strong class="score mini">${v.score}</strong></td><td style="color:var(--muted)">${v.vetoes.map(escape).join('；')}</td></tr>`).join('') : '<tr><td colspan="4">今日没有被风险否决的高分股</td></tr>';
 
@@ -640,6 +719,15 @@ function renderSmartPage(data) {
     })
     .catch(() => {});
 
+  // TopK 一键加自选
+  document.querySelectorAll('button[data-fav]').forEach(btn => btn.onclick = async e => {
+    e.stopPropagation();
+    btn.disabled = true;
+    try {
+      await api('/favorites', { method: 'POST', body: JSON.stringify({ code: btn.dataset.fav, name: btn.dataset.favname }) });
+      btn.textContent = '已加自选'; notice('已加入自选', true);
+    } catch (err) { notice(err.message); btn.disabled = false; }
+  });
   const rerunBtn = document.querySelector('#smart-rerun');
   const status = document.querySelector('#smart-status');
   rerunBtn.onclick = async () => {
@@ -815,6 +903,14 @@ async function backtestPage() {
             <option value="250">250 天（约一年）</option>
           </select>
         </div>
+        <div class="bt-field">
+          <label class="cfg-label" for="bt-strategy">策略</label>
+          <select class="cfg-input" id="bt-strategy">
+            <option value="macd" selected>MACD 金叉死叉</option>
+            <option value="huichun">回春法（MA60+金叉+放量）</option>
+            <option value="breakout">20日突破（海龟简化）</option>
+          </select>
+        </div>
         <button class="bt-run" id="bt-run">开始回测</button>
       </div>
     `)}
@@ -833,6 +929,7 @@ async function backtestPage() {
   runBtn.onclick = async () => {
     const code = document.querySelector('#bt-code').value.trim();
     const days = document.querySelector('#bt-days').value;
+    const strategy = document.querySelector('#bt-strategy').value;
     if (!/^\d{6}$/.test(code)) { notice('请输入 6 位股票代码'); return; }
 
     runBtn.disabled = true;
@@ -840,7 +937,7 @@ async function backtestPage() {
     resultDiv.innerHTML = '<div class="card"><p class="muted center">正在计算回测数据…</p></div>';
 
     try {
-      const res = await api(`/backtest?code=${code}&days=${days}`);
+      const res = await api(`/backtest?code=${code}&days=${days}&strategy=${strategy}`);
       renderBacktestResult(res, code, days);
     } catch (e) {
       resultDiv.innerHTML = `<div class="card"><p class="error">回测失败：${e.message}</p></div>`;
@@ -1067,7 +1164,7 @@ document.addEventListener('touchstart', e => {
 function renderCheckHistory(code) {
   const slot = document.createElement('div');
   slot.className = 'check-history';
-  slot.innerHTML = '<div class="seclbl">体检历史（近 14 天健康分）</div><div style="color:var(--muted);font-size:13px;padding:8px 0">加载中…</div>';
+  slot.innerHTML = '<div class="seclbl">体检历史（近 60 天健康分）</div><div style="color:var(--muted);font-size:13px;padding:8px 0">加载中…</div>';
   api(`/stocks/${code}/history`).then(hist => {
     const entries = hist.entries || [];
     if (entries.length < 2) { slot.innerHTML = '<div class="seclbl">体检历史</div><div class="local-note" style="margin:0;padding:12px">多体检几次就会在这里显示健康分趋势（每天记一次）</div>'; return; }
@@ -1083,6 +1180,20 @@ function renderCheckHistory(code) {
       return `<circle cx="${x}" cy="${y}" r="3.5" fill="${color}"/><text x="${x}" y="${h - 1}" font-size="8" fill="#94a3b8" text-anchor="middle">${e.date.slice(5)}</text>`;
     }).join('');
     const last = entries[entries.length - 1];
+    // 统计：近30日均值 / 标准差 / 灯色变化次数
+    const recent30 = entries.slice(-30);
+    const mean30 = recent30.reduce((s, e) => s + e.health, 0) / recent30.length;
+    const std30 = Math.sqrt(recent30.reduce((s, e) => s + Math.pow(e.health - mean30, 2), 0) / recent30.length);
+    let lightChanges = 0;
+    for (let i = 1; i < entries.length; i++) if (entries[i].light !== entries[i - 1].light) lightChanges++;
+    const lightCount = { green: 0, yellow: 0, red: 0 };
+    entries.forEach(e => { if (lightCount[e.light] != null) lightCount[e.light]++; });
+    const statsHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:6px;margin-top:8px">
+      <div class="metric" style="min-width:0"><div class="ml">近30日均分</div><div class="mv" style="font-size:14px">${mean30.toFixed(1)}</div></div>
+      <div class="metric" style="min-width:0"><div class="ml">波动(σ)</div><div class="mv" style="font-size:14px">${std30.toFixed(1)}</div></div>
+      <div class="metric" style="min-width:0"><div class="ml">灯色变化</div><div class="mv" style="font-size:14px">${lightChanges} 次</div></div>
+      <div class="metric" style="min-width:0"><div class="ml">绿/黄/红</div><div class="mv" style="font-size:13px;color:var(--muted)"><span style="color:var(--good)">${lightCount.green}</span> / <span style="color:var(--amber)">${lightCount.yellow}</span> / <span style="color:var(--red)">${lightCount.red}</span></div></div>
+    </div>`;
     slot.innerHTML = `<div class="seclbl">体检历史（近 ${entries.length} 天健康分）</div><svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:#f8fafc;border-radius:8px"><polyline points="${pts}" fill="none" stroke="#4f6cae" stroke-width="1.6" opacity=".8"/>${dots}</svg><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--muted)"><span>最新：<b style="color:${last.light === 'green' ? 'var(--good)' : last.light === 'yellow' ? 'var(--amber)' : 'var(--red)'}">${last.band} ${last.health}分</b>（${last.date}）</span><span>收盘 ${number(last.close)}</span></div>`;
   }).catch(() => { slot.innerHTML = ''; });
   return slot.outerHTML;
@@ -1263,6 +1374,8 @@ async function alertsPage() {
           <select id="alert-type">
             <option value="price">价格</option>
             <option value="pct">涨跌幅(%)</option>
+            <option value="break">破位（跌破支撑）</option>
+            <option value="volume">放量（量比）</option>
           </select>
         </label>
         <label>触发条件
@@ -1271,7 +1384,7 @@ async function alertsPage() {
             <option value="<=">≤ 下穿</option>
           </select>
         </label>
-        <label>阈值 <input id="alert-value" type="number" step="0.01" placeholder="如 1500 或 -3"></label>
+        <label>阈值 <input id="alert-value" type="number" step="0.01" placeholder="破位/放量类型可填 0（忽略阈值）"></label>
         <div class="modal-actions"><button class="outline" id="alert-cancel">取消</button><button class="primary" id="alert-save">保存</button></div>
       </div>
     </div>`);
