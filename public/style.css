@@ -753,7 +753,9 @@ tbody tr:nth-child(even) { background: rgba(238,241,246,.5); }
 tr[data-code] { cursor: pointer; transition: background .12s var(--ease); }
 tr[data-code]:hover { background: var(--blue-soft); }
 
-.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; cursor: grab; }
+.table-wrap.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+.table-wrap:active { cursor: grabbing; }
 .table-wrap::-webkit-scrollbar { height: 8px; }
 .table-wrap::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 [data-theme="dark"] .table-wrap::-webkit-scrollbar-thumb { background: #475569; }

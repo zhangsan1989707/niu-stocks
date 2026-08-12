@@ -1873,6 +1873,48 @@ const AlertNotifier = {
 
 AlertNotifier.init();
 
+// --- 宽表鼠标拖拽横向滚动（P2-15）---
+(function initDragScroll() {
+  let suppressClick = false;
+  // 拖拽结束后抑制一次 click（防止误触发行跳转）
+  document.addEventListener('click', e => {
+    if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; }
+  }, true);
+
+  document.addEventListener('mousedown', e => {
+    const wrap = e.target.closest('.table-wrap');
+    if (!wrap || e.button !== 0) return;
+    if (wrap.scrollWidth <= wrap.clientWidth + 2) return; // 无需滚动
+    const startX = e.clientX;
+    const startScroll = wrap.scrollLeft;
+    let dragging = false;
+    const onMove = ev => {
+      const dx = ev.clientX - startX;
+      if (!dragging && Math.abs(dx) > 4) {
+        dragging = true;
+        wrap.classList.add('dragging');
+      }
+      if (dragging) {
+        wrap.scrollLeft = startScroll - dx;
+        ev.preventDefault();
+      }
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (dragging) {
+        suppressClick = true;
+        wrap.classList.remove('dragging');
+      }
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  // 触屏优化：仅横向 pan，不拦截页面纵向滚动
+  document.querySelectorAll('.table-wrap').forEach(w => w.style.touchAction = 'pan-x pan-y');
+})();
+
 // --- 深色/浅色模式切换（P2-10）---
 (function initTheme() {
   const saved = localStorage.getItem('leostocks_theme');
