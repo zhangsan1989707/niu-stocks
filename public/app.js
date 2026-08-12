@@ -703,8 +703,26 @@ function renderSmartPage(data) {
     <td>${t.light === 'green' ? '🟢' : t.light === 'yellow' ? '🟡' : '🔴'}</td>
     <td><button class="mini" data-fav="${t.code}" data-favname="${escape(t.name)}">⭐自选</button></td>
   </tr>`).join('');
-  const topTable = data.top.length ? `<p class="report-note">🖱️ 悬停行可看五路信号明细，点击行进入个股体检。入选分 50 为中性，越高越强。</p>
-  <div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>今日</th><th>入选分</th><th>体检分</th><th>RPS60</th><th>RPS120</th><th>120日</th><th>成交(亿)</th><th>量比</th><th>灯</th><th>操作</th></tr></thead><tbody>${topRows}</tbody></table></div>` : '<p class="report-note">今日没有通过全部筛选与风险否决的股票。</p>';
+  // 移动端卡片版 TopK（P2-11）
+  const isMobile = window.innerWidth < 760;
+  const smartCards = data.top.length ? `<div class="smart-cards">${data.top.map(t => `
+    <div class="smart-card" data-code="${t.code}">
+      <div style="display:flex;align-items:center;gap:8px"><b>${escape(t.name)}</b><small style="color:var(--muted)">${t.code}</small><span style="margin-left:auto" class="lightdot ${t.light}">${t.light === 'green' ? '🟢' : t.light === 'yellow' ? '🟡' : '🔴'} ${t.health}</span></div>
+      <div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap;font-size:13px">
+        <span>现价 <b>${number(t.price)}</b> <em class="${t.changePct >= 0 ? 'up' : 'down'}" style="font-style:normal">${t.changePct >= 0 ? '+' : ''}${number(t.changePct)}%</em></span>
+        <span>入选分 <b class="score">${t.score}</b></span>
+        <span>RPS60 <b>${t.rps60 ?? '—'}</b></span>
+        <span>RPS120 <b>${t.rps120 ?? '—'}</b></span>
+        <span>量比 <b>${number(t.volumeRatio)}</b></span>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <button class="mini" data-fav="${t.code}" data-favname="${escape(t.name)}">⭐自选</button>
+        <span style="margin-left:auto;color:var(--muted);font-size:11px">点击卡片进体检 →</span>
+      </div>
+    </div>`).join('')}</div>` : '<p class="report-note">今日没有通过全部筛选与风险否决的股票。</p>';
+  const topTable = data.top.length ? (isMobile ? smartCards : `<p class="report-note">🖱️ 悬停行可看五路信号明细，点击行进入个股体检。入选分 50 为中性，越高越强。</p>
+  <div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>今日</th><th>入选分</th><th>体检分</th><th>RPS60</th><th>RPS120</th><th>120日</th><th>成交(亿)</th><th>量比</th><th>灯</th><th>操作</th></tr></thead><tbody>${topRows}</tbody></table></div>`) : '<p class="report-note">今日没有通过全部筛选与风险否决的股票。</p>';
+
 
   const vetoRows = data.vetoed.length ? data.vetoed.map(v => `<tr data-code="${v.code}"><td>${v.code}</td><td>${escape(v.name)}</td><td><strong class="score mini">${v.score}</strong></td><td style="color:var(--muted)">${v.vetoes.map(escape).join('；')}</td></tr>`).join('') : '<tr><td colspan="4">今日没有被风险否决的高分股</td></tr>';
 

@@ -1226,6 +1226,11 @@ footer {
 }
 .cfg-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-glow); }
 .cfg-hint { font-size: 11px; color: var(--faint); }
+.smart-cards { display: grid; gap: 10px; }
+.smart-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: box-shadow .15s; }
+.smart-card:hover { box-shadow: var(--shadow); }
+.smart-card .lightdot { font-size: 11px; padding: 2px 8px; }
+
 @media (max-width: 760px) { .config-grid { grid-template-columns: 1fr; } }
 
 /* ========== Backtest Page (回测页) ========== */
