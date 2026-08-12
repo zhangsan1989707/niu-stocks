@@ -1254,6 +1254,7 @@ async function portfolioPage() {
       <div id="port-check-slot"></div>
       ${card('持仓明细', `<div class="table-wrap"><table><thead><tr><th>股票</th><th>持仓数</th><th>成本价</th><th>现价</th><th>浮动盈亏</th><th>收益率</th><th>仓位</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table></div>`, 'report-card')}
       ${card('交易流水', '<div id="trade-list"><p class="empty">加载中…</p></div>')}
+      <div id="netvalue-slot"></div>
       <div id="addPosModal" class="modal" style="display:none">
         <div class="modal-box">
           <h3>添加持仓</h3>
@@ -1356,6 +1357,27 @@ async function portfolioPage() {
         <div class="trade-item"><span class="tdir ${x.direction}">${x.direction === 'buy' ? '买入' : '卖出'}</span><b>${escape(x.name)}</b><small>${x.code}</small><span>${x.shares}股 × ¥${fmt(x.price)}</span><span class="tamt">¥${fmt(x.amount)}</span><span class="tdate">${date(x.createdAt)}</span>${x.reason ? `<span class="treason">📝 ${escape(x.reason)}</span>` : ''}</div>`).join('')
         : '<p class="empty">还没有交易记录</p>';
     } catch { document.querySelector('#trade-list').innerHTML = '<p class="empty">加载失败</p>'; }
+    // 净值曲线
+    api('/portfolio/history').then(h => {
+      const slot = document.querySelector('#netvalue-slot');
+      if (!slot || !h.history || h.history.length < 2) { if (slot) slot.innerHTML = ''; return; }
+      const days = h.history;
+      const vals = days.map(d => d.totalValue);
+      const min = Math.min(...vals), max = Math.max(...vals);
+      const span = Math.max(max - min, 1);
+      const w = 760, hh = 90, pad = 6;
+      const pts = vals.map((v, i) => `${(i / (vals.length - 1) * (w - pad * 2) + pad).toFixed(1)},${(hh - pad - (v - min) / span * (hh - pad * 2)).toFixed(1)}`).join(' ');
+      const dots = days.map((d, i) => {
+        const x = (i / (vals.length - 1) * (w - pad * 2) + pad).toFixed(1);
+        const y = (hh - pad - (vals[i] - min) / span * (hh - pad * 2)).toFixed(1);
+        return `<circle cx="${x}" cy="${y}" r="3" fill="#4f6cae"/><text x="${x}" y="${hh - 1}" font-size="8" fill="#94a3b8" text-anchor="middle">${d.date.slice(5)}</text>`;
+      }).join('');
+      const first = vals[0], lastV = vals[vals.length - 1];
+      const chg = first > 0 ? ((lastV - first) / first * 100).toFixed(2) : '—';
+      const chgCls = chg !== '—' && Number(chg) >= 0 ? 'up' : 'down';
+      slot.innerHTML = card('📈 持仓净值（近 ' + days.length + ' 天）', `<svg viewBox="0 0 ${w} ${hh}" style="width:100%;height:auto;background:#f8fafc;border-radius:8px"><polyline points="${pts}" fill="none" stroke="#4f6cae" stroke-width="1.8"/>${dots}</svg>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;color:var(--muted)"><span>起始：¥${number(first)}（${days[0].date}）</span><span>最新：<b>¥${number(lastV)}</b>（${days[days.length-1].date}）</span><span>区间涨跌：<b class="${chgCls}">${chg}%</b></span></div>`);
+    }).catch(() => {});
   } catch (e) { checkPage(); notice(e.message); }
 }
 
