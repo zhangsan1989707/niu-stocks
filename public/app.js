@@ -669,8 +669,19 @@ function smartValidateCard(v) {
     const cls = h.excess == null ? '' : h.excess >= 0 ? 'up' : 'down';
     return `<tr><td>持有 ${h.h} 日（T+${h.h}）</td><td>${h.samples}</td><td>${h.avgReturn == null ? '—' : h.avgReturn + '%'}</td><td>${h.winRate == null ? '—' : h.winRate + '%'}</td><td>${h.benchReturn == null ? '—' : h.benchReturn + '%'}</td><td class="${cls}"><b>${excess}</b></td></tr>`;
   }).join('');
+  // 信号 IC 表
+  let icHtml = '';
+  if (v.signalICs && v.signalICs.length) {
+    const icRows = v.signalICs.map(s => {
+      const cls = s.ic == null ? '' : s.ic > 0.05 ? 'up' : s.ic < -0.05 ? 'down' : '';
+      return `<tr><td>${escape(s.name)}</td><td>${s.samples}</td><td class="${cls}"><b>${s.ic == null ? '—' : s.ic}</b></td><td style="color:var(--muted);font-size:12px">${escape(s.note)}</td></tr>`;
+    }).join('');
+    icHtml = '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>信号</th><th>样本</th><th>IC</th><th>解读</th></tr></thead><tbody>' + icRows + '</tbody></table></div>'
+      + (v.icNote ? '<p style="color:var(--muted);font-size:12px;margin-top:6px">' + escape(v.icNote) + '</p>' : '');
+  }
   return card('📈 前向收益回验（事后统计）', `<p class="report-note">买入口径：${escape(v.buyRule)}；基准：${escape(v.benchmark)}。${escape(v.reliabilityNote)}</p>
   <div class="table-wrap"><table><thead><tr><th>周期</th><th>样本</th><th>平均收益</th><th>胜率</th><th>基准收益</th><th>超额收益</th></tr></thead><tbody>${rows}</tbody></table></div>
+  ${icHtml}
   <p style="color:var(--muted);font-size:12.5px;margin-top:8px">⚠️ ${escape(v.disclaimer)}</p>`);
 }
 
