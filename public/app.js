@@ -778,6 +778,119 @@ function renderSmartPage(data) {
   };
 }
 
+// --- 涨停股池页面（P2-14）---
+const ZT_BOARDS = ['全部', '沪主板10cm', '深主板10cm', '创业板20cm', '科创板20cm', '北交所30cm', '其他'];
+
+function ztSummaryCards(summary) {
+  if (!summary) return '';
+  const b = summary.boards || {};
+  const boardText = Object.entries(b).map(([k, v]) => k + ' ' + v + '只').join(' · ');
+  return `<div class="port-summary">
+    <div class="ps-card"><div class="ps-label">涨停总数</div><div class="ps-value" style="color:var(--red)">${summary.maxLbc != null ? summary.maxLbc : '—'}</div><div class="ps-sub">最高 ${summary.maxLbc || 0} 板</div></div>
+    <div class="ps-card"><div class="ps-label">连板≥3</div><div class="ps-value">${summary.lbc3 || 0}</div><div class="ps-sub">≥5板：${summary.lbc5 || 0}</div></div>
+    <div class="ps-card"><div class="ps-label">炸板=0</div><div class="ps-value">${summary.zbc0 || 0}</div><div class="ps-sub">炸板≥3：${summary.zbc3 || 0}</div></div>
+    <div class="ps-card"><div class="ps-label">龙虎榜</div><div class="ps-value">${summary.lhbCount || 0}</div><div class="ps-sub">60日新高：${summary.newHighCount || 0}</div></div>
+    <div class="ps-card"><div class="ps-label">板块分布</div><div class="ps-value" style="font-size:11px;line-height:1.5">${boardText}</div></div>
+  </div>`;
+}
+
+function renderZTPoolPage(data) {
+  let pool = data.pool || [];
+  const summary = data.summary;
+  const boardHtml = '<button class="zt-filter" data-board="全部">全部</button>' + ZT_BOARDS.slice(1).map(b => `<button class="zt-filter" data-board="${b}">${b}</button>`).join('');
+  layout('涨停股池', `<p class="intro">当日 A 股涨停一览（东方财富公开接口）：连板梯队、封板强度、龙虎榜、60日新高，点击行进入个股体检。数据日期：${data.date}${data.cached ? '（缓存）' : ''}</p>
+    <div class="port-toolbar">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">连板≥</span><select id="zt-minlbc" style="border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;background:var(--card)"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
+      <span id="zt-board-filters" style="display:flex;gap:6px;flex-wrap:wrap">${boardHtml}</span>
+      <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)"><input type="checkbox" id="zt-lhb"> 仅龙虎榜</label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)"><input type="checkbox" id="zt-high"> 仅60日新高</label>
+      <button class="outline" id="zt-refresh" style="margin-left:auto">↻ 刷新</button>
+    </div>
+    ${ztSummaryCards(summary)}
+    <div id="zt-ladder"></div>
+    <div id="zt-result"></div>
+    <div id="zt-history-slot"></div>
+    <p style="color:var(--muted);font-size:12.5px">⚠️ ${escape(data.disclaimer || '仅供研究')}</p>`);
+
+  const applyFilter = () => {
+    const minLbc = Number(document.querySelector('#zt-minlbc').value || 1);
+    const board = document.querySelector('.zt-filter.active')?.dataset.board || '全部';
+    const lhbOnly = document.querySelector('#zt-lhb').checked;
+    const highOnly = document.querySelector('#zt-high').checked;
+    let rows = pool.filter(x =>
+      x.lbc >= minLbc &&
+      (board === '全部' || x.board === board) &&
+      (!lhbOnly || x.lhb) &&
+      (!highOnly || x.newHigh === true)
+    );
+    rows = [...rows].sort((a, b) => (b.lbc - a.lbc) || (a.firstTime.localeCompare(b.firstTime)));
+    const isMobile = window.innerWidth < 760;
+    if (isMobile) {
+      document.querySelector('#zt-result').innerHTML = rows.length ? `<div class="smart-cards">${rows.map(x => `
+        <div class="smart-card" data-code="${x.code}">
+          <div style="display:flex;align-items:center;gap:8px"><b>${escape(x.name)}</b><small style="color:var(--muted)">${x.code}</small><span style="margin-left:auto" class="lightdot ${x.lbc >= 3 ? 'red' : 'yellow'}">${x.lbc}板</span></div>
+          <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)">
+            <span>${escape(x.board)}</span><span>封单比 ${x.fundRatio ?? '—'}</span><span>换手 ${x.hs}%</span><span>量比 ${x.volumeRatio ?? '—'}</span>
+            <span>${x.lhb ? '🔥龙虎榜' : ''}${x.newHigh === true ? ' 📈新高' : ''}</span>
+          </div>
+        </div>`).join('')}</div>` : '<p class="empty">无符合条件的涨停股</p>';
+    } else {
+      document.querySelector('#zt-result').innerHTML = `<div class="table-wrap"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>板块</th><th>行业</th><th>连板</th><th>龙虎榜</th><th>涨跌幅</th><th>最新价</th><th>成交额(亿)</th><th>流通市值(亿)</th><th>换手%</th><th>量比</th><th>封单(亿)</th><th>封单/成交</th><th>首封</th><th>末封</th><th>炸板</th><th>涨停统计</th><th>新高</th></tr></thead><tbody>${rows.map((x, i) => `<tr data-code="${x.code}">
+        <td>${i + 1}</td><td>${x.code}</td><td><b>${escape(x.name)}</b></td><td>${escape(x.board)}</td><td>${escape(x.industry)}</td>
+        <td><strong class="score">${x.lbc}板</strong></td>
+        <td>${x.lhb ? '<b style="color:var(--red)">🔥</b>' : ''}</td>
+        <td class="up">+${x.zdp}%</td><td>${x.price}</td>
+        <td>${x.amountYi}</td><td>${x.ltszYi}</td><td>${x.hs}</td><td>${x.volumeRatio ?? '—'}</td>
+        <td>${x.fundYi}</td><td>${x.fundRatio ?? '—'}</td>
+        <td>${x.firstTime}</td><td>${x.lastTime}</td><td>${x.zbc}</td><td>${escape(x.zttj)}</td>
+        <td>${x.newHigh === true ? '📈' : ''}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+    }
+    // 连板梯队
+    const ladder = {};
+    rows.forEach(x => { ladder[x.lbc] = (ladder[x.lbc] || 0) + 1; });
+    const ladderHtml = Object.entries(ladder).sort((a, b) => Number(b[0]) - Number(a[0])).map(([lb, cnt]) => {
+      const names = rows.filter(x => x.lbc === Number(lb)).slice(0, 8).map(x => escape(x.name)).join('、');
+      return `<span class="patchip ${Number(lb) >= 3 ? 'bear' : 'neu'}" style="margin:2px" title="${names}${rows.filter(x => x.lbc === Number(lb)).length > 8 ? '…' : ''}">${lb}板 × ${cnt}</span>`;
+    }).join('');
+    document.querySelector('#zt-ladder').innerHTML = ladderHtml ? `<div class="checkdone">📶 连板梯队：${ladderHtml}</div>` : '';
+  };
+  applyFilter();
+
+  document.querySelector('#zt-minlbc').onchange = applyFilter;
+  document.querySelector('#zt-lhb').onchange = applyFilter;
+  document.querySelector('#zt-high').onchange = applyFilter;
+  document.querySelectorAll('.zt-filter').forEach(btn => btn.onclick = () => {
+    document.querySelectorAll('.zt-filter').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilter();
+  });
+  document.querySelector('#zt-refresh').onclick = async () => {
+    notice('正在刷新…');
+    try { const fresh = await api('/ztpool?force=1'); pool = fresh.pool || []; renderZTPoolPage(fresh); } catch (e) { notice(e.message); }
+  };
+  const pageEl = document.querySelector('.page');
+  if (pageEl) pageEl.onclick = e => {
+    if (e.target.closest('button') || e.target.closest('select') || e.target.closest('input') || e.target.closest('label')) return;
+    const row = e.target.closest('[data-code]');
+    if (row) location.hash = `#/check/${row.dataset.code}`;
+  };
+  // 历史
+  api('/ztpool/history').then(({ history }) => {
+    const slot = document.querySelector('#zt-history-slot');
+    if (!slot || !history || !history.length) return;
+    slot.innerHTML = card('🗂️ 历史涨停存档', `<div>${history.map(h => `<span class="patchip neu" style="margin:2px" title="${h.top.map(escape).join('、')}">${h.date} · ${h.total}只 · 最高${h.maxLbc}板</span>`).join('')}</div>`);
+  }).catch(() => {});
+}
+
+async function ztPage() {
+  app.innerHTML = '<section class="page"><div class="loading">正在获取涨停股池…</div></section>';
+  let data;
+  try { data = await api('/ztpool'); }
+  catch (e) { checkPage(); return notice(e.message); }
+  renderZTPoolPage(data);
+}
+
 async function smartPage() {
   app.innerHTML = '<section class="page"><div class="loading">🔭 正在扫描全市场（约 5500 只）——首次运行约需 30-60 秒，请稍候…</div></section>';
   let data;
@@ -1587,7 +1700,7 @@ async function loadIndices() {
 function router() {
   const path = location.hash.slice(2) || 'check';
   if (path.startsWith('check/')) { const code = path.split('/')[1]; checkPage(); setTimeout(() => { document.querySelector('#stock-input').value = code; api(`/stocks/${code}/report`).then(r => { const scanSlot = document.querySelector('#scan-slot'); if (scanSlot) playScanAnim(scanSlot, Promise.resolve({j:r}), {title:'个股体检中'}).then(({j}) => j && renderReport(j)); }).catch(e => notice(e.message)); }, 100); return; }
-  ({ check: checkPage, screen: screenPage, smart: smartPage, backtest: backtestPage, validate: validatePage, rules: rulesPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
+  ({ check: checkPage, screen: screenPage, smart: smartPage, zt: ztPage, backtest: backtestPage, validate: validatePage, rules: rulesPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
 }
 loadIndices();
 setInterval(loadIndices, 60000);

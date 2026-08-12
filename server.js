@@ -70,6 +70,13 @@ const server = http.createServer(async (req, res) => {
 if (require.main === module) {
   server.listen(PORT, '0.0.0.0', () => console.log(`牛股体检站运行于 http://localhost:${PORT}`));
   setInterval(() => evaluateAlerts().catch(error => console.error('提醒检查失败：', error.message)), 60000).unref();
+  // 每日涨停池：16:35 后自动抓取一次（幂等：当日已有落盘则跳过）
+  const ztTick = () => { try { require('./lib/server/zt-pool').getZTPool({ force: false }).catch(e => console.error('[zt-pool] 自动抓取失败：', e.message)); } catch (e) {} };
+  setTimeout(() => {
+    const now = new Date();
+    if (now.getHours() * 60 + now.getMinutes() >= 16 * 60 + 35) ztTick();
+  }, 60000).unref();
+  setInterval(ztTick, 1800000).unref();
   // 每日自动选股：交易日 15:35 后自动跑一次（引擎内部幂等判断）
   const screenTick = () => maybeRunDailyScreen().catch(error => console.error('[smart-screen] 自动选股失败：', error.message));
   setTimeout(screenTick, 30000).unref();
