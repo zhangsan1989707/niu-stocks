@@ -1103,6 +1103,7 @@ function renderValidateResult(res) {
     <section class="card">
       <h2>验证结果 · ${res.forwardDays} 天预测周期</h2>
       <p class="muted">总样本 ${res.samples} 条 · 整体上涨概率 <strong class="tnum">${res.totalWinRate}%</strong></p>
+      ${res.spearmanIC != null ? `<p class="muted">健康分-未来收益 Spearman IC：<strong class="tnum" style="color:${res.spearmanIC > 0.1 ? 'var(--red,#c0392b)' : res.spearmanIC < -0.1 ? 'var(--green,#27ae60)' : 'var(--muted)'}">${res.spearmanIC}</strong> · ${escape(res.icNote)}</p>` : ''}
       ${res.reliabilityNote ? `<p class="${res.reliable ? 'muted' : 'error'}">${escape(res.reliabilityNote)}</p>` : ''}
       <div class="bt-stats">${groupCards}</div>
     </section>
