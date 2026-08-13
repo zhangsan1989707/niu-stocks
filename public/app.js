@@ -775,6 +775,7 @@ function renderSmartPage(data) {
   const vetoRows = data.vetoed.length ? data.vetoed.map(v => `<tr data-code="${v.code}"><td>${v.code}</td><td>${escape(v.name)}</td><td><strong class="score mini">${v.score}</strong></td><td style="color:var(--muted)">${v.vetoes.map(escape).join('；')}</td></tr>`).join('') : '<tr><td colspan="4">今日没有被风险否决的高分股</td></tr>';
 
   layout('智能选股', `
+    <div id="regime-banner"></div>
     <div class="how"><b>🧭 方法说明</b><p>全市场三层漏斗：<b>硬过滤</b>（停牌/ST/次新/流动性/过热，不参与打分）→ <b>RPS 相对强度候选</b>（全市场 60 日涨幅百分位）→ <b>K线精析五路信号加权投票</b>（${weightText}），破位与深度回撤由风险层一票否决。每个交易日 15:35 后自动运行并存档，作为前向回验的数据基础。数据日期：${data.date}${data.cached ? '（今日已跑过，读取存档）' : ''}</p></div>
     ${card('', funnel)}
     ${rejChips ? card('硬过滤淘汰明细', `<div>${rejChips}</div>`) : ''}
@@ -805,6 +806,13 @@ function renderSmartPage(data) {
       btn.textContent = '已加自选'; notice('已加入自选', true);
     } catch (err) { notice(err.message); btn.disabled = false; }
   });
+  // 市场状态（Phase 5）
+  api('/regime').then(m => {
+    const slot = document.querySelector('#regime-banner');
+    if (!slot || !m.ok || m.regime === 'unknown') return;
+    const meta = { bull: { label: '🟢 牛市 · 趋势策略优先', cls: 'green' }, range: { label: '🟡 震荡 · 降低仓位观望', cls: 'yellow' }, bear: { label: '🔴 熊市 · 防守/空仓', cls: 'red' } }[m.regime] || { label: m.regime, cls: 'neutral' };
+    slot.innerHTML = '<div class="checkdone" style="background:var(--' + meta.cls + '-soft);border-color:var(--' + meta.cls + '-line);color:var(--' + (meta.cls === 'green' ? 'good' : meta.cls === 'yellow' ? 'amber' : 'red') + ')">' + meta.label + ' · ' + escape(m.note || '') + ' <small style="font-weight:400">（沪深300 ' + m.indexClose + ' / MA60 ' + m.ma60 + '）</small></div>';
+  }).catch(() => {});
   const rerunBtn = document.querySelector('#smart-rerun');
   const status = document.querySelector('#smart-status');
   rerunBtn.onclick = async () => {
@@ -1169,7 +1177,14 @@ async function backtestPage() {
         <button class="bt-run" id="bt-run">开始回测</button>
       </div>
     `)}
-    <div id="bt-result"></div>`);
+    <div id="bt-result"></div>
+    <h2 style="margin-top:26px">组合回测（基于历史选股名单）</h2>
+    ${card('组合回测参数', `<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <div class="bt-field"><label class="cfg-label" for="pb-topn">每期买入 (TopN)</label><select class="cfg-input" id="pb-topn"><option value="5">5 只</option><option value="10" selected>10 只</option><option value="20">20 只</option></select></div>
+      <div class="bt-field"><label class="cfg-label" for="pb-hold">持有周期</label><select class="cfg-input" id="pb-hold"><option value="1">1 期</option><option value="2">2 期</option><option value="5" selected>5 期</option><option value="10">10 期</option></select></div>
+      <button class="primary" id="pb-run" style="height:42px">运行组合回测</button>
+    </div>`)}
+    <div id="pb-result"></div>`);
 
   // 尝试填充当前选中股票
   const cur = document.querySelector('#stockSelect');
@@ -1200,6 +1215,46 @@ async function backtestPage() {
       runBtn.disabled = false;
       runBtn.textContent = '开始回测';
     }
+  };
+  // 组合回测（Phase 5）
+  const pbRun = document.querySelector('#pb-run');
+  const pbResult = document.querySelector('#pb-result');
+  if (pbRun) pbRun.onclick = async () => {
+    const topN = document.querySelector('#pb-topn').value;
+    const holdDays = document.querySelector('#pb-hold').value;
+    pbRun.disabled = true; pbRun.textContent = '回测中…';
+    pbResult.innerHTML = '<div class="loading" style="margin:30px auto">组合回测中…</div>';
+    try {
+      const r = await api('/portfolio-backtest?topN=' + topN + '&holdDays=' + holdDays);
+      if (!r.ok || !r.days) { pbResult.innerHTML = card('组合回测', '<p class="empty">' + escape(r.message || '暂无数据') + '</p>'); return; }
+      const metric = (label, val, cls) => '<div class="bt-stat"><span class="bt-stat-label">' + label + '</span><span class="bt-stat-val tnum" style="color:' + (cls || 'var(--muted)') + '">' + (val == null ? '—' : val) + '</span></div>';
+      const trCls = v => v == null ? 'var(--muted)' : v >= 0 ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)';
+      let curve = '';
+      if (r.dailyValues && r.dailyValues.length >= 2) {
+        const vals = r.dailyValues, w = 760, h = 140, pad = 8;
+        const mn = Math.min(...vals.map(v => v.nav)) * 0.98, mx = Math.max(...vals.map(v => v.nav)) * 1.02;
+        const X = i => pad + (i / (vals.length - 1)) * (w - pad * 2);
+        const Y = v => h - pad - ((v - mn) / (mx - mn)) * (h - pad * 2);
+        const pts = vals.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v.nav).toFixed(1)).join(' ');
+        curve = '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%;height:auto;background:var(--bg);border-radius:8px;margin:8px 0"><polyline points="' + pts + '" fill="none" stroke="#4f6cae" stroke-width="1.8"/><text x="' + pad + '" y="' + (h - 2) + '" font-size="9" fill="#94a3b8">' + vals[0].date + '</text><text x="' + (w - pad) + '" y="' + (h - 2) + '" font-size="9" fill="#94a3b8" text-anchor="end">' + vals[vals.length - 1].date + '</text></svg>';
+      }
+      const tradesHtml = r.trades.length ? '<div class="table-wrap wide" style="margin-top:10px"><table><thead><tr><th>代码</th><th>名称</th><th>买入日</th><th>卖出日</th><th>买入价</th><th>卖出价</th><th>收益</th></tr></thead><tbody>' + r.trades.map(x => '<tr><td>' + x.code + '</td><td>' + escape(x.name) + '</td><td>' + x.entryDate + '</td><td>' + x.exitDate + '</td><td>' + x.entryPrice + '</td><td>' + x.exitPrice + '</td><td style="color:' + (x.ret >= 0 ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)') + '">' + (x.ret >= 0 ? '+' : '') + x.ret + '%</td></tr>').join('') + '</tbody></table></div>' : '';
+      pbResult.innerHTML = card('组合回测结果 · Top' + topN + ' 等权 / 持有 ' + holdDays + ' 期', `
+        <div class="bt-stats">
+          ${metric('总收益', (r.totalReturn == null ? '—' : (r.totalReturn >= 0 ? '+' : '') + r.totalReturn + '%'), trCls(r.totalReturn))}
+          ${metric('年化(CAGR)', (r.cagr == null ? '—' : r.cagr + '%'), trCls(r.cagr))}
+          ${metric('最大回撤', (r.maxDrawdown == null ? '—' : r.maxDrawdown + '%'), 'var(--green,#27ae60)')}
+          ${metric('Sharpe', r.sharpe, trCls(r.sharpe))}
+          ${metric('胜率', (r.winRate == null ? '—' : r.winRate + '%'), trCls(r.winRate == null ? null : r.winRate - 50))}
+          ${metric('盈亏比', r.profitFactor, 'var(--muted)')}
+          ${metric('已平仓', r.closedTrades + ' 笔', 'var(--muted)')}
+        </div>
+        ${curve}
+        ${r.note ? '<p class="report-note" style="color:var(--amber)">' + escape(r.note) + '</p>' : ''}
+        ${tradesHtml}
+        <p style="color:var(--muted);font-size:12px;margin-top:8px">${escape(r.disclaimer)}</p>`);
+    } catch (e) { pbResult.innerHTML = card('组合回测失败', '<p class="empty">' + escape(e.message) + '</p>'); }
+    finally { pbRun.disabled = false; pbRun.textContent = '运行组合回测'; }
   };
 }
 
