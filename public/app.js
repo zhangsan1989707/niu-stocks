@@ -40,7 +40,7 @@ function renderMurphy(m) {
     const badge = f.pts > 0 ? '+' + f.pts : f.pts < 0 ? '' + f.pts : '·';
     const desc = INDICATOR_DESC[f.name];
     const tt = desc ? `data-tooltip="${desc.meaning}" data-tooltip-signal="${desc.hint}"` : '';
-    return `<div class="dimrow2 ${cls} has-tip" ${tt}><span class="fpts ${f.pts ? '' : 'idle'}">${badge}</span><span class="dn">${escape(f.name)}</span><span class="dwhy">${escape(f.plain)}</span></div>${statsHtml}`;
+    return `<div class="dimrow2 ${cls} has-tip" ${tt}><span class="fpts ${f.pts ? '' : 'idle'}">${badge}</span><span class="dn">${escape(f.name)}</span><span class="dwhy">${escape(f.plain)}</span></div>`;
   }).join('');
   return `<div class="seclbl">摆动指标组 · 墨菲《金融市场技术分析》<span style="font-weight:400;color:#9098a9;font-size:12px">（${m.factors.length} 项，本组 ${m.pts > 0 ? '+' + m.pts : m.pts} 分）</span></div><div class="dims">${rows}</div>`;
 }
@@ -1433,7 +1433,7 @@ function renderCheckHistory(code) {
       <div class="metric" style="min-width:0"><div class="ml">灯色变化</div><div class="mv" style="font-size:14px">${lightChanges} 次</div></div>
       <div class="metric" style="min-width:0"><div class="ml">绿/黄/红</div><div class="mv" style="font-size:13px;color:var(--muted)"><span style="color:var(--good)">${lightCount.green}</span> / <span style="color:var(--amber)">${lightCount.yellow}</span> / <span style="color:var(--red)">${lightCount.red}</span></div></div>
     </div>`;
-    slot.innerHTML = `<div class="seclbl">体检历史（近 ${entries.length} 天健康分）</div><svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:#f8fafc;border-radius:8px"><polyline points="${pts}" fill="none" stroke="#4f6cae" stroke-width="1.6" opacity=".8"/>${dots}</svg><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--muted)"><span>最新：<b style="color:${last.light === 'green' ? 'var(--good)' : last.light === 'yellow' ? 'var(--amber)' : 'var(--red)'}">${last.band} ${last.health}分</b>（${last.date}）</span><span>收盘 ${number(last.close)}</span></div>`;
+    slot.innerHTML = `<div class="seclbl">体检历史（近 ${entries.length} 天健康分）</div><svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:#f8fafc;border-radius:8px"><polyline points="${pts}" fill="none" stroke="#4f6cae" stroke-width="1.6" opacity=".8"/>${dots}</svg><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--muted)"><span>最新：<b style="color:${last.light === 'green' ? 'var(--good)' : last.light === 'yellow' ? 'var(--amber)' : 'var(--red)'}">${last.band} ${last.health}分</b>（${last.date}）</span><span>收盘 ${number(last.close)}</span></div>${statsHtml}`;
   }).catch(() => { slot.innerHTML = ''; });
   return slot.outerHTML;
 }
