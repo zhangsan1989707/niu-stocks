@@ -159,6 +159,7 @@ nav a:hover { color: var(--blue); background: rgba(255,255,255,.7); }
 .nav-more { position: relative; display: flex; align-items: center; }
 .nav-more-btn { border: 0; background: transparent; color: var(--ink-soft); font: inherit; font-weight: 600; font-size: 13px; padding: 6px 12px; border-radius: 8px; cursor: pointer; transition: color .15s, background .15s; white-space: nowrap; }
 .nav-more-btn:hover { color: var(--blue); background: rgba(255,255,255,.6); }
+.nav-more-btn.on { color: #fff; background: var(--blue); box-shadow: 0 2px 8px var(--blue-glow); }
 .nav-dropdown { position: absolute; top: calc(100% + 8px); right: 0; z-index: 200; min-width: 150px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-xl); padding: 6px; display: none; }
 .nav-dropdown.open { display: block; }
 .nav-dropdown a { display: block; padding: 9px 14px; border-radius: 8px; font-size: 13px; color: var(--ink-soft); text-decoration: none; white-space: nowrap; }
