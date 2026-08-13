@@ -12,18 +12,23 @@
 <body>
   <header>
     <a class="brand" href="#/check"><i></i><strong>牛股体检站</strong><span>· 看懂能不能买</span></a>
-    <nav>
-      <a href="#/portfolio">工作台</a>
+    <nav class="main-nav">
       <a href="#/check">个股体检</a>
+      <a href="#/zt">涨停</a>
       <a href="#/screen">选股</a>
       <a href="#/smart">智能选股</a>
-      <a href="#/zt">涨停</a>
-      <a href="#/backtest">回测</a>
-      <a href="#/validate">验证</a>
-      <a href="#/rules">规则</a>
-      <a href="#/alerts">提醒</a>
-      <a href="#/notes">笔记</a>
-</nav>
+      <div class="nav-more">
+        <button class="nav-more-btn" id="navMoreBtn">更多 ▾</button>
+        <div class="nav-dropdown" id="navDropdown">
+          <a href="#/portfolio">💼 工作台</a>
+          <a href="#/backtest">🧪 回测</a>
+          <a href="#/validate">📊 验证</a>
+          <a href="#/rules">📖 规则</a>
+          <a href="#/alerts">🔔 提醒</a>
+          <a href="#/notes">📝 笔记</a>
+        </div>
+      </div>
+    </nav>
   </header>
   <div id="indices-bar" class="indices-bar"></div>
   <main id="app"></main>

@@ -379,6 +379,12 @@ function checkPage() {
   layout('个股体检', `<div class="search-row"><div class="stock-search"><span>⌕</span><input id="stock-input" autocomplete="off" placeholder="输入公司名或代码，如 比亚迪 / 002594"><div id="suggestions" class="suggestions"></div></div><button id="report-btn" class="primary">体检</button></div>
     <!-- <a class="hot-banner" href="#/screen">🔥 不知道测哪只？看「回春法」今日精选的强势候选 →</a> -->
     <!-- <div class="quota"><span>本机体检额度 <b>不限次数</b></span><span>数据与自选股仅保存在当前电脑</span></div> -->
+    <div class="quick-cards">
+      <a class="q-card" href="#/check"><span class="q-icon" style="background:var(--blue-soft);color:var(--blue)">🔬</span><div><b>个股体检</b><small>51 项技术体检</small></div></a>
+      <a class="q-card" href="#/zt"><span class="q-icon" style="background:var(--red-soft);color:var(--red)">🚀</span><div><b>涨停</b><small>连板梯队 · 龙虎榜</small></div></a>
+      <a class="q-card" href="#/screen"><span class="q-icon" style="background:var(--amber-soft);color:var(--amber)">🎯</span><div><b>选股</b><small>回春法候选</small></div></a>
+      <a class="q-card" href="#/smart"><span class="q-icon" style="background:var(--good-soft);color:var(--good)">🧠</span><div><b>智能选股</b><small>全市场三层漏斗</small></div></a>
+    </div>
     <div class="popular">🔥 大家在测：${[['600392','盛和资源'],['601138','工业富联'],['000021','深科技'],['002594','比亚迪'],['600519','贵州茅台']].map(([c,n]) => `<button data-code="${c}">${n}</button>`).join('')}</div>
     <div id="scan-slot"></div><div id="report-slot"></div><div id="favorites"></div>`);
   const input = document.querySelector('#stock-input'); let selectedCode = '';
@@ -1916,6 +1922,25 @@ const AlertNotifier = {
 };
 
 AlertNotifier.init();
+
+// --- "更多"下拉菜单（导航精简）---
+(function initNavMore() {
+  const btn = document.getElementById('navMoreBtn');
+  const dd = document.getElementById('navDropdown');
+  if (!btn || !dd) return;
+  const close = () => dd.classList.remove('open');
+  btn.onclick = e => { e.stopPropagation(); dd.classList.toggle('open'); };
+  // 点击外部关闭
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.nav-more')) close();
+  });
+  // 点击菜单项后关闭
+  dd.querySelectorAll('a').forEach(a => a.onclick = close);
+  // Esc 关闭
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  // 路由变化时关闭
+  window.addEventListener('hashchange', close);
+})();
 
 // --- 宽表鼠标拖拽横向滚动（P2-15）---
 (function initDragScroll() {
