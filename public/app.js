@@ -852,6 +852,7 @@ function ztSummaryCards(summary) {
 
 // 导出涨停池 XLSX（零依赖生成器，3 个 sheet：明细 / 连板梯队 / 情绪概览）
 function exportZTPoolXLSX(pool, summary, date) {
+  const isFiltered = pool.length !== (summary.total || 0);
   const headers = ['序号', '代码', '名称', '板块', '所属行业', '连板数', '龙虎榜', '涨跌幅%', '最新价', '成交额(亿)', '流通市值(亿)', '总市值(亿)', '换手率%', '量比', '封单金额(亿)', '封单/成交额', '首次封板', '最后封板', '炸板次数', '涨停统计', '是否60日新高'];
   const rows = pool.map((x, i) => [
     i + 1, x.code, x.name, x.board, x.industry, x.lbc, x.lhb ? '是' : '',
@@ -892,7 +893,7 @@ function exportZTPoolXLSX(pool, summary, date) {
   const blob = XlsxBuilder.buildXlsx(sheets);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'A股涨停股池_' + date + '.xlsx';
+  a.download = 'A股涨停股池_' + date + (isFiltered ? '_筛选' : '') + '.xlsx';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -903,7 +904,7 @@ function renderZTPoolPage(data) {
   let pool = data.pool || [];
   const summary = data.summary;
   const boardHtml = '<button class="zt-filter" data-board="全部">全部</button>' + ZT_BOARDS.slice(1).map(b => `<button class="zt-filter" data-board="${b}">${b}</button>`).join('');
-  layout('涨停股池', `<p class="intro">当日 A 股涨停一览（东方财富公开接口）：连板梯队、封板强度、龙虎榜、60日新高，点击行进入个股体检。数据日期：${data.date}${data.cached ? '（缓存）' : ''}${data.prevDate ? ' · 昨日池参考：' + data.prevDate : ''}</p>
+  layout('涨停股池', `<p class="intro">当日 A 股涨停一览（东方财富公开接口）：连板梯队、封板强度、龙虎榜、60日新高，点击行进入个股体检。数据日期：${data.date}${data.cached ? '（缓存）' : ''}${data.date !== new Date().toISOString().slice(0,10).replace(/-/g,'') ? ' · ⚠️ 非今日数据，点击 ↻ 刷新获取最新' : ''}${data.prevDate ? ' · 昨日池参考：' + data.prevDate : ''}</p>
     <div class="port-toolbar">
       <div style="display:flex;align-items:center;gap:6px"><span style="font-size:13px;color:var(--muted)">日期</span><input type="date" id="zt-date" max="${new Date().toISOString().slice(0,10)}" value="${data.date.slice(0,4)}-${data.date.slice(4,6)}-${data.date.slice(6,8)}" style="border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;background:var(--card)"></div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">连板≥</span><select id="zt-minlbc" style="border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;background:var(--card)"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
@@ -919,6 +920,7 @@ function renderZTPoolPage(data) {
     <div id="zt-history-slot"></div>
     <p style="color:var(--muted);font-size:12.5px">⚠️ ${escape(data.disclaimer || '仅供研究')}</p>`);
 
+  let currentRows = pool;
   const applyFilter = () => {
     const minLbc = Number(document.querySelector('#zt-minlbc').value || 1);
     const board = document.querySelector('.zt-filter.active')?.dataset.board || '全部';
@@ -931,6 +933,7 @@ function renderZTPoolPage(data) {
       (!highOnly || x.newHigh === true)
     );
     rows = [...rows].sort((a, b) => (b.lbc - a.lbc) || (a.firstTime.localeCompare(b.firstTime)));
+    currentRows = rows;
     const isMobile = window.innerWidth < 760;
     if (isMobile) {
       document.querySelector('#zt-result').innerHTML = rows.length ? `<div class="smart-cards">${rows.map(x => `
@@ -973,7 +976,7 @@ function renderZTPoolPage(data) {
     btn.classList.add('active');
     applyFilter();
   });
-  document.querySelector('#zt-export').onclick = () => exportZTPoolXLSX(pool, summary, data.date);
+  document.querySelector('#zt-export').onclick = () => exportZTPoolXLSX(currentRows && currentRows.length ? currentRows : pool, summary, data.date);
   document.querySelector('#zt-date').onchange = e => {
     const v = e.target.value; // YYYY-MM-DD
     if (!v) return;
