@@ -1763,7 +1763,13 @@ async function loadIndices() {
 }
 
 function router() {
-  const path = location.hash.slice(2) || 'check';
+  const path = (location.hash.slice(2) || 'check').split('?')[0];
+  // 导航当前页高亮
+  const base = path.startsWith('check') ? 'check' : path;
+  document.querySelectorAll('header nav a').forEach(a => {
+    const href = (a.getAttribute('href') || '').slice(2).split('?')[0];
+    a.classList.toggle('on', href === base);
+  });
   if (path.startsWith('check/')) { const code = path.split('/')[1]; checkPage(); setTimeout(() => { document.querySelector('#stock-input').value = code; api(`/stocks/${code}/report`).then(r => { const scanSlot = document.querySelector('#scan-slot'); if (scanSlot) playScanAnim(scanSlot, Promise.resolve({j:r}), {title:'个股体检中'}).then(({j}) => j && renderReport(j)); }).catch(e => notice(e.message)); }, 100); return; }
   ({ check: checkPage, screen: screenPage, smart: smartPage, zt: ztPage, backtest: backtestPage, validate: validatePage, rules: rulesPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
 }
