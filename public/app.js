@@ -710,9 +710,26 @@ function smartValidateCard(v) {
     icHtml = '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>信号</th><th>样本</th><th>IC</th><th>解读</th></tr></thead><tbody>' + icRows + '</tbody></table></div>'
       + (v.icNote ? '<p style="color:var(--muted);font-size:12px;margin-top:6px">' + escape(v.icNote) + '</p>' : '');
   }
+  // Score 分桶单调性表（Phase 3）
+  let bucketHtml = '';
+  if (v.scoreBuckets && v.scoreBuckets.length) {
+    const heads = v.scoreBuckets.map(sb => '<th>' + sb.h + '日样本</th><th>' + sb.h + '日均收益</th><th>' + sb.h + '日胜率</th><th>最差单笔</th>').join('');
+    const rows = (v.scoreBuckets[0].buckets || []).map((bk, bi) => {
+      const cells = v.scoreBuckets.map(sb => {
+        const b = sb.buckets[bi];
+        return '<td>' + (b.samples || 0) + '</td><td>' + (b.avgReturn == null ? '—' : (b.avgReturn >= 0 ? '+' : '') + b.avgReturn + '%') + '</td><td>' + (b.winRate == null ? '—' : b.winRate + '%') + '</td><td>' + (b.worst == null ? '—' : b.worst + '%') + '</td>';
+      }).join('');
+      return '<tr><td><b>Score ' + bk.label + '</b></td>' + cells + '</tr>';
+    }).join('');
+    const mono = (v.monotonic || []).map(m => '<span class="patchip ' + (m.verdict.includes('有效') ? 'bull' : m.verdict.includes('复核') ? 'bear' : 'neu') + '" style="margin:2px">T+' + m.h + '：' + escape(m.verdict) + (m.diff != null ? '（' + (m.diff >= 0 ? '+' : '') + m.diff + '%）' : '') + '</span>').join('');
+    bucketHtml = '<div class="table-wrap wide" style="margin-top:14px"><table><thead><tr><th>Score 区间</th>' + heads + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+      + '<p style="color:var(--muted);font-size:12px;margin-top:6px">单调性检验（80+ vs 50-55）：' + (mono || '样本不足') + '</p>';
+  }
+
   return card('📈 前向收益回验（事后统计）', `<p class="report-note">买入口径：${escape(v.buyRule)}；基准：${escape(v.benchmark)}。${escape(v.reliabilityNote)}</p>
   <div class="table-wrap wide"><table><thead><tr><th>周期</th><th>样本</th><th>平均收益</th><th>胜率</th><th>基准收益</th><th>超额收益</th></tr></thead><tbody>${rows}</tbody></table></div>
   ${icHtml}
+  ${bucketHtml}
   <p style="color:var(--muted);font-size:12.5px;margin-top:8px">⚠️ ${escape(v.disclaimer)}</p>`);
 }
 
