@@ -847,8 +847,9 @@ function renderZTPoolPage(data) {
   let pool = data.pool || [];
   const summary = data.summary;
   const boardHtml = '<button class="zt-filter" data-board="全部">全部</button>' + ZT_BOARDS.slice(1).map(b => `<button class="zt-filter" data-board="${b}">${b}</button>`).join('');
-  layout('涨停股池', `<p class="intro">当日 A 股涨停一览（东方财富公开接口）：连板梯队、封板强度、龙虎榜、60日新高，点击行进入个股体检。数据日期：${data.date}${data.cached ? '（缓存）' : ''}</p>
+  layout('涨停股池', `<p class="intro">当日 A 股涨停一览（东方财富公开接口）：连板梯队、封板强度、龙虎榜、60日新高，点击行进入个股体检。数据日期：${data.date}${data.cached ? '（缓存）' : ''}${data.prevDate ? ' · 昨日池参考：' + data.prevDate : ''}</p>
     <div class="port-toolbar">
+      <div style="display:flex;align-items:center;gap:6px"><span style="font-size:13px;color:var(--muted)">日期</span><input type="date" id="zt-date" value="${data.date.slice(0,4)}-${data.date.slice(4,6)}-${data.date.slice(6,8)}" style="border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;background:var(--card)"></div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">连板≥</span><select id="zt-minlbc" style="border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;background:var(--card)"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
       <span id="zt-board-filters" style="display:flex;gap:6px;flex-wrap:wrap">${boardHtml}</span>
       <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)"><input type="checkbox" id="zt-lhb"> 仅龙虎榜</label>
@@ -917,6 +918,12 @@ function renderZTPoolPage(data) {
     applyFilter();
   });
   document.querySelector('#zt-export').onclick = () => exportZTPoolXLSX(pool, summary, data.date);
+  document.querySelector('#zt-date').onchange = e => {
+    const v = e.target.value; // YYYY-MM-DD
+    if (!v) return;
+    const ds = v.replace(/-/g, '');
+    location.hash = '#/zt?' + ds;
+  };
   document.querySelector('#zt-refresh').onclick = async () => {
     notice('正在刷新…');
     try { const fresh = await api('/ztpool?force=1'); pool = fresh.pool || []; renderZTPoolPage(fresh); } catch (e) { notice(e.message); }
@@ -931,14 +938,20 @@ function renderZTPoolPage(data) {
   api('/ztpool/history').then(({ history }) => {
     const slot = document.querySelector('#zt-history-slot');
     if (!slot || !history || !history.length) return;
-    slot.innerHTML = card('🗂️ 历史涨停存档', `<div>${history.map(h => `<span class="patchip neu" style="margin:2px" title="${h.top.map(escape).join('、')}">${h.date} · ${h.total}只 · 最高${h.maxLbc}板</span>`).join('')}</div>`);
+    slot.innerHTML = card('🗂️ 历史涨停存档（点击回看）', `<div>${history.map(h => `<span class="patchip neu zt-hist" style="margin:2px;cursor:pointer" data-date="${h.date}" title="${h.top.map(escape).join('、')}">${h.date} · ${h.total}只 · 最高${h.maxLbc}板</span>`).join('')}</div>`);
+    slot.querySelectorAll('.zt-hist').forEach(chip => chip.onclick = () => {
+      const ds = chip.dataset.date;
+      if (ds && ds !== data.date) location.hash = '#/zt?' + ds;
+    });
   }).catch(() => {});
 }
 
 async function ztPage() {
+  const dateParam = location.hash.split('?')[1] || '';
+  const wantDate = /^\d{8}$/.test(dateParam) ? dateParam : '';
   app.innerHTML = '<section class="page"><div class="loading">正在获取涨停股池…</div></section>';
   let data;
-  try { data = await api('/ztpool'); }
+  try { data = await api('/ztpool' + (wantDate ? '?date=' + wantDate : '')); }
   catch (e) { checkPage(); return notice(e.message); }
   renderZTPoolPage(data);
 }
@@ -1409,7 +1422,7 @@ async function portfolioPage() {
         <div class="ps-card"><div class="ps-label">总市值</div><div class="ps-value">¥${fmt(summary.totalValue)}</div></div>
         <div class="ps-card"><div class="ps-label">总成本</div><div class="ps-value" style="color:var(--muted)">¥${fmt(summary.totalCost)}</div></div>
         <div class="ps-card ${summary.totalPnl >= 0 ? '' : ''}"><div class="ps-label">浮动盈亏</div><div class="ps-value ${pnlCls(summary.totalPnl)}">${pnlTxt(summary.totalPnl)}</div><div class="ps-sub ${pnlCls(summary.totalPnl)}">${pnlTxt(summary.totalPnlPct)}%</div></div>
-        <div class="ps-card"><div class="ps-label">今日盈亏</div><div class="ps-value ${pnlCls(summary.todayPnl)}">${pnlTxt(summary.todayPnl)}</div><div class="ps-sub">按今日涨跌幅估算</div></div>
+        <div class="ps-card"><div class="ps-label">今日盈亏</div><div class="ps-value ${pnlCls(summary.todayPnl)}">${pnlTxt(summary.todayPnl)}</div><div class="ps-sub">按昨收价精确计算</div></div>
         <div class="ps-card"><div class="ps-label">持仓数</div><div class="ps-value">${summary.count} 只</div></div>
       </div>`;
 
