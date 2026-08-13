@@ -1213,6 +1213,26 @@ function renderBacktestResult(res, code, days) {
   const winRateColor = res.winRate >= 50 ? 'var(--red, #c0392b)' : 'var(--green, #27ae60)';
   const totalReturnColor = res.totalReturn >= 0 ? 'var(--red, #c0392b)' : 'var(--green, #27ae60)';
 
+  // 收益曲线（策略 vs 基准）
+  const curveHtml = (() => {
+    if (!res.equityCurve || res.equityCurve.length < 2) return '';
+    const ec = res.equityCurve, bc = res.benchCurve || [];
+    const w = 760, h = 160, pad = 8;
+    let min = Math.min(...ec.map(p => p.value), ...(bc.length ? bc.map(p => p.value) : [1])) * 0.97;
+    let max = Math.max(...ec.map(p => p.value), ...(bc.length ? bc.map(p => p.value) : [1])) * 1.03;
+    if (min === max) { min *= 0.99; max *= 1.01; }
+    const X = i => pad + (i / (ec.length - 1)) * (w - pad * 2);
+    const Y = v => h - pad - ((v - min) / (max - min)) * (h - pad * 2);
+    const line = pts => pts.map((p, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p.value).toFixed(1)).join(' ');
+    let svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%;height:auto;background:var(--bg);border-radius:8px;margin:10px 0">';
+    svg += '<polyline points="' + line(ec) + '" fill="none" stroke="#4f6cae" stroke-width="1.8"/>';
+    if (bc.length >= 2) svg += '<polyline points="' + line(bc) + '" fill="none" stroke="#9aa6bd" stroke-width="1.4" stroke-dasharray="5 4"/>';
+    svg += '<text x="' + pad + '" y="' + (h - 2) + '" font-size="9" fill="#94a3b8">' + ec[0].date + '</text>';
+    svg += '<text x="' + (w - pad) + '" y="' + (h - 2) + '" font-size="9" fill="#94a3b8" text-anchor="end">' + ec[ec.length - 1].date + '</text>';
+    svg += '</svg>';
+    const legend = '<div style="display:flex;gap:14px;font-size:12px;color:var(--muted);margin-bottom:4px"><span><span style="display:inline-block;width:14px;height:2px;background:#4f6cae;vertical-align:middle;margin-right:4px"></span>策略</span>' + (bc.length >= 2 ? '<span><span style="display:inline-block;width:14px;height:2px;background:#9aa6bd;vertical-align:middle;margin-right:4px"></span>沪深300</span>' : '') + '</div>';
+    return legend + svg;
+  })();
   // 信号列表（最近 20 条）
   const recentSignals = res.signals.slice(-20).reverse();
   const signalRows = recentSignals.map(s => {
@@ -1230,6 +1250,7 @@ function renderBacktestResult(res, code, days) {
   div.innerHTML = `
     <section class="card">
       <h2>回测结果 · ${code}</h2>
+      ${curveHtml}
       <p class="muted">回测周期 ${days} 天 · ${res.signalCount || 0} 次买入信号 / ${res.closedTrades || 0} 笔已平仓交易</p>
       <div class="bt-stats">
         <div class="bt-stat">
@@ -1243,6 +1264,30 @@ function renderBacktestResult(res, code, days) {
         <div class="bt-stat">
           <span class="bt-stat-label">最大回撤</span>
           <span class="bt-stat-val tnum" style="color:var(--green,#27ae60)">${res.maxDrawdown.toFixed(2)}%</span>
+        </div>
+        <div class="bt-stat">
+          <span class="bt-stat-label">年化(CAGR)</span>
+          <span class="bt-stat-val tnum" style="color:${res.cagr == null ? 'var(--muted)' : res.cagr >= 0 ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)'}">${res.cagr == null ? '—' : (res.cagr >= 0 ? '+' : '') + res.cagr.toFixed(2) + '%'}</span>
+        </div>
+        <div class="bt-stat">
+          <span class="bt-stat-label">Sharpe</span>
+          <span class="bt-stat-val tnum" style="color:${res.sharpe == null ? 'var(--muted)' : res.sharpe >= 1 ? 'var(--red,#c0392b)' : res.sharpe >= 0 ? 'var(--amber,#b4530a)' : 'var(--green,#27ae60)'}">${res.sharpe == null ? '—' : res.sharpe.toFixed(2)}</span>
+        </div>
+        <div class="bt-stat">
+          <span class="bt-stat-label">盈亏比</span>
+          <span class="bt-stat-val tnum">${res.profitFactor == null ? '—' : res.profitFactor.toFixed(2)}</span>
+        </div>
+        <div class="bt-stat">
+          <span class="bt-stat-label">换手率</span>
+          <span class="bt-stat-val tnum">${res.turnover == null ? '—' : res.turnover.toFixed(2) + 'x'}</span>
+        </div>
+        <div class="bt-stat">
+          <span class="bt-stat-label">基准(沪深300)</span>
+          <span class="bt-stat-val tnum" style="color:${res.benchmarkReturn == null ? 'var(--muted)' : res.benchmarkReturn >= 0 ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)'}">${res.benchmarkReturn == null ? '—' : (res.benchmarkReturn >= 0 ? '+' : '') + res.benchmarkReturn.toFixed(2) + '%'}</span>
+        </div>
+        <div class="bt-stat">
+          <span class="bt-stat-label">超额收益</span>
+          <span class="bt-stat-val tnum" style="color:${res.excessReturn == null ? 'var(--muted)' : res.excessReturn >= 0 ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)'}">${res.excessReturn == null ? '—' : (res.excessReturn >= 0 ? '+' : '') + res.excessReturn.toFixed(2) + '%'}</span>
         </div>
         <div class="bt-stat">
           <span class="bt-stat-label">买入持有基准</span>
