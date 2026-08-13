@@ -1216,7 +1216,7 @@ footer {
 
 @media (max-width: 760px) {
   header { flex-wrap: nowrap; }
-  nav { overflow-x: auto; max-width: calc(100vw - 140px); white-space: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  nav { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   nav::-webkit-scrollbar { display: none; }
   nav a { display: inline-block !important; flex: none; }
   .bt-stats { grid-template-columns: repeat(2, 1fr); }
@@ -1479,12 +1479,11 @@ footer {
 
 /* ========== Responsive ========== */
 @media (max-width: 760px) {
-  header { padding: 0 14px; height: auto; min-height: 56px; gap: 10px; flex-wrap: wrap; }
+  header { padding: 0 10px; height: auto; min-height: 52px; gap: 8px; flex-wrap: nowrap; }
+  .brand { font-size: 15px; flex-shrink: 0; }
   .brand span { display: none; }
-  .brand { font-size: 16px; }
-  nav { padding: 2px; }
+  nav { padding: 2px; flex: 1; max-width: calc(100vw - 130px); }
   nav a { padding: 6px 10px; font-size: 12px; }
-  nav a:nth-child(3), nav a:nth-child(4) { display: none; }
   .page { margin: 18px 14px 50px; min-height: 400px; padding: 0; }
   .search-row { gap: 8px; }
   .primary { padding: 10px 16px; }
