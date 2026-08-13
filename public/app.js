@@ -395,7 +395,7 @@ function checkPage() {
     if (!j) { notice('体检失败，请稍后重试'); return; }
     renderReport(j);
   };
-  const selectStock = stock => { selectedCode = stock.code; input.value = `${stock.name} · ${stock.code}`; document.querySelector('#suggestions').replaceChildren(); const p = document.querySelector('.popular'); if (p) p.style.display = ''; input.focus(); };
+  const selectStock = stock => { selectedCode = stock.code; input.value = `${stock.name} · ${stock.code}`; const sb = document.querySelector('#suggestions'); if (sb) { sb.replaceChildren(); sb.style.display = 'none'; } const p = document.querySelector('.popular'); if (p) p.style.display = ''; input.focus(); };
   document.querySelector('#report-btn').onclick = () => run(input.value.trim());
   input.onkeydown = e => {
     if (e.key === 'Enter') { e.preventDefault(); const first = document.querySelector('#suggestions button'); if (first && !selectedCode) return first.click(); run(input.value.trim()); }
@@ -403,13 +403,38 @@ function checkPage() {
   };
   document.querySelectorAll('.popular button').forEach(button => button.onclick = () => run(button.dataset.code));
   let timer, seq = 0;
-  input.oninput = () => { selectedCode = ''; clearTimeout(timer); timer = setTimeout(async () => {
-    const q = input.value.trim(); const box = document.querySelector('#suggestions'); const popular = document.querySelector('.popular');
-    if (!q) { seq++; box.replaceChildren(); if (popular) popular.style.display = ''; return; }
-    if (popular) popular.style.display = 'none';
-    const mySeq = ++seq;
-    try { const data = await api(`/stocks/search?q=${encodeURIComponent(q)}`); if (mySeq !== seq) return; box.innerHTML = data.stocks.map(stock => `<button data-code="${stock.code}"><b>${stock.name}</b><span>${stock.code}</span></button>`).join(''); box.querySelectorAll('button').forEach(button => button.onclick = () => selectStock({ code: button.dataset.code, name: button.querySelector('b').textContent })); } catch { if (mySeq === seq) box.replaceChildren(); }
-  }, 180); };
+  input.oninput = () => {
+    selectedCode = '';
+    const q = input.value.trim();
+    const box = document.querySelector('#suggestions');
+    const popular = document.querySelector('.popular');
+    // 清空输入：立即同步隐藏下拉框并恢复热门区（不等防抖，避免请求竞态残留）
+    if (!q) {
+      seq++;
+      clearTimeout(timer);
+      box.replaceChildren();
+      box.style.display = 'none';
+      if (popular) popular.style.display = '';
+      return;
+    }
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      if (popular) popular.style.display = 'none';
+      const mySeq = ++seq;
+      try {
+        const data = await api(`/stocks/search?q=${encodeURIComponent(q)}`);
+        if (mySeq !== seq) return;
+        box.innerHTML = data.stocks.map(stock => `<button data-code="${stock.code}"><b>${stock.name}</b><span>${stock.code}</span></button>`).join('');
+        box.style.display = '';
+        box.querySelectorAll('button').forEach(button => button.onclick = () => selectStock({ code: button.dataset.code, name: button.querySelector('b').textContent }));
+      } catch { if (mySeq === seq) { box.replaceChildren(); box.style.display = 'none'; } }
+    }, 180);
+  };
+  // 失焦/点击外部时隐藏下拉框
+  input.addEventListener('blur', () => setTimeout(() => {
+    const b = document.querySelector('#suggestions');
+    if (b) { b.replaceChildren(); b.style.display = 'none'; }
+  }, 150));
   renderFavorites();
 }
 
