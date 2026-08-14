@@ -699,6 +699,13 @@ dd { margin: 0; font-weight: 600; font-family: var(--mono); font-variant-numeric
 .custom-scan .outline { flex-shrink: 0; }
 
 
+/* ========== UX 增强（B1/B5） ========== */
+mark.hl { background: #fde68a; color: #92400e; border-radius: 3px; padding: 0 1px; }
+.table-wrap.wide thead th { position: sticky; top: 60px; z-index: 5; background: var(--bg); box-shadow: 0 1px 0 var(--line); }
+@media (max-width: 760px) {
+  .table-wrap.wide thead th { top: 52px; }
+}
+
 /* ========== Table ========== */
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 

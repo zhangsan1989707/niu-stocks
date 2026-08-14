@@ -5,6 +5,25 @@ const number = value => Number(value || 0).toLocaleString('zh-CN', { maximumFrac
 const date = value => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—';
 function notice(message, good = false) { const node = document.createElement('div'); node.className = `toast ${good ? 'good' : ''}`; node.textContent = message; document.body.append(node); setTimeout(() => { node.classList.add('fadeout'); setTimeout(() => node.remove(), 280); }, 2300); }
 function layout(title, content, intro = '') { document.title = `${title} · 牛股体检站`; app.innerHTML = `<section class="page"><h1>${title}</h1>${intro ? `<p class="intro">${intro}</p>` : ''}${content}</section>`; }
+
+// 搜索关键词高亮（B1）
+function highlightHtml(text, q) {
+  const t = escape(text);
+  const s = String(q || '').trim();
+  if (!s) return t;
+  const i = t.toLowerCase().indexOf(s.toLowerCase());
+  if (i < 0) return t;
+  return t.slice(0, i) + '<mark class="hl">' + t.slice(i, i + s.length) + '</mark>' + t.slice(i + s.length);
+}
+
+// 滚动位置记忆（A2）
+function saveScroll() { try { sessionStorage.setItem('leostocks_scroll', String(window.scrollY)); } catch {} }
+function restoreScroll(delay = 300) {
+  try {
+    const v = sessionStorage.getItem('leostocks_scroll');
+    if (v != null) setTimeout(() => window.scrollTo(0, Number(v) || 0), delay);
+  } catch {}
+}
 function card(title, body, cls='') { return `<article class="card ${cls}">${title ? `<h2>${title}</h2>` : ''}${body}</article>`; }
 function loading() { app.innerHTML = '<section class="page"><div class="loading">正在读取市场数据…</div></section>'; }
 
@@ -35,7 +54,7 @@ function attachStockSuggest(input, opts = {}) {
       try {
         const data = await api('/stocks/search?q=' + encodeURIComponent(q));
         if (!data.stocks || !data.stocks.length) { box.replaceChildren(); box.style.display = 'none'; return; }
-        box.innerHTML = data.stocks.map(s => '<button data-code="' + s.code + '" data-name="' + escape(s.name) + '"><b>' + escape(s.name) + '</b><span>' + s.code + '</span></button>').join('');
+        box.innerHTML = data.stocks.map(s => '<button data-code="' + s.code + '" data-name="' + escape(s.name) + '"><b>' + highlightHtml(s.name, q) + '</b><span>' + highlightHtml(s.code, q) + '</span></button>').join('');
         box.style.display = '';
         box.querySelectorAll('button').forEach(b => b.onclick = () => {
           selected = true;
@@ -480,7 +499,7 @@ function checkPage() {
       try {
         const data = await api(`/stocks/search?q=${encodeURIComponent(q)}`);
         if (mySeq !== seq) return;
-        box.innerHTML = data.stocks.map(stock => `<button data-code="${stock.code}"><b>${stock.name}</b><span>${stock.code}</span></button>`).join('');
+        box.innerHTML = data.stocks.map(stock => `<button data-code="${stock.code}"><b>${highlightHtml(stock.name, q)}</b><span>${highlightHtml(stock.code, q)}</span></button>`).join('');
         box.style.display = '';
         box.querySelectorAll('button').forEach(button => button.onclick = () => selectStock({ code: button.dataset.code, name: button.querySelector('b').textContent }));
       } catch { if (mySeq === seq) { box.replaceChildren(); box.style.display = 'none'; } }
@@ -1836,6 +1855,8 @@ async function portfolioPage() {
 // --- 提醒系统（P1）---
 async function alertsPage() {
   loading();
+  const codeParam = (location.hash.split('?')[1] || '').match(/code=(\d{6})/);
+  const nameParam = (((location.hash.split('?')[1] || '').match(/name=([^&]*)/) || [])[1] ? decodeURIComponent((location.hash.split('?')[1] || '').match(/name=([^&]*)/)[1]) : '');
   let rules = [], pending = [], unreadCount = 0;
   try {
     const data = await api('/alerts');
@@ -1897,6 +1918,11 @@ async function alertsPage() {
   renderPending(); renderRules();
 
   document.querySelector('#addAlertBtn').onclick = () => { document.querySelector('#alertModal').style.display = 'flex'; };
+  if (codeParam) {
+    document.querySelector('#alert-code').value = codeParam[1];
+    if (nameParam) document.querySelector('#alert-name').value = nameParam;
+    document.querySelector('#alertModal').style.display = 'flex';
+  }
   document.querySelector('#alert-cancel').onclick = () => { document.querySelector('#alertModal').style.display = 'none'; };
   attachStockSuggest(document.querySelector('#alert-code'), { onSelect: (code, name) => { document.querySelector('#alert-code').value = name + ' · ' + code; const nm = document.querySelector('#alert-name'); if (nm && !nm.value.trim()) nm.value = name; } });
   document.querySelector('#alert-save').onclick = async () => {
@@ -2021,8 +2047,19 @@ async function loadIndices() {
   } catch { bar.style.display = ''; bar.innerHTML = '<div class="idx-card unavailable"><span class="idx-chg">指数行情暂不可用</span></div>'; }
 }
 
+let _lastPath = null;
 function router() {
+  // A2: 离开前保存滚动位置
+  if (_lastPath) { try { sessionStorage.setItem('scroll_' + _lastPath, String(window.scrollY)); } catch {} }
   const path = (location.hash.slice(2) || 'check').split('?')[0];
+  _lastPath = path;
+  // A1: 标题兜底（页面函数内 layout 会覆盖）
+  const TITLES = { check: '个股体检', zt: '涨停股池', screen: '回春法选股', smart: '智能选股', backtest: '策略回测', validate: '验证', rules: '规则说明', portfolio: '工作台', alerts: '提醒', notes: '笔记' };
+  if (TITLES[path]) document.title = TITLES[path] + ' · 牛股体检站';
+  // A2: 点击跳转前保存滚动
+  document.addEventListener('click', e => {
+    if (e.target.closest('[data-code]')) { try { sessionStorage.setItem('leostocks_scroll', String(window.scrollY)); } catch {} }
+  }, true);
   // 导航当前页高亮
   const base = path.startsWith('check') ? 'check' : path;
   const MORE_PAGES = ['screen', 'backtest', 'validate', 'rules', 'alerts', 'notes'];
@@ -2035,6 +2072,13 @@ function router() {
   if (moreBtn) moreBtn.classList.toggle('on', MORE_PAGES.includes(base));
   if (path.startsWith('check/')) { const code = path.split('/')[1]; checkPage(); setTimeout(() => { document.querySelector('#stock-input').value = code; api(`/stocks/${code}/report`).then(r => { const scanSlot = document.querySelector('#scan-slot'); if (scanSlot) playScanAnim(scanSlot, Promise.resolve({j:r}), {title:'个股体检中'}).then(({j}) => j && renderReport(j)); }).catch(e => notice(e.message)); }, 100); return; }
   ({ check: checkPage, screen: screenPage, smart: smartPage, zt: ztPage, backtest: backtestPage, validate: validatePage, rules: rulesPage, portfolio: portfolioPage, alerts: alertsPage, notes: notesPage }[path] || checkPage)();
+  // A2: 返回列表时恢复滚动位置（数据渲染后）
+  if (['zt', 'smart', 'screen', 'portfolio'].includes(path)) {
+    try {
+      const v = sessionStorage.getItem('scroll_' + path);
+      if (v != null) setTimeout(() => window.scrollTo(0, Number(v) || 0), 350);
+    } catch {}
+  }
 }
 loadIndices();
 setInterval(loadIndices, 60000);
