@@ -10,6 +10,7 @@ const api = (path, options = {}, _retry = 0) => fetch(`/api${path}`, { headers: 
 });
 const escape = value => String(value ?? '').replace(/[&<>"']/g, x => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' })[x]);
 const number = value => Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+const pct = value => { const v = Number(value || 0); return (v >= 0 ? '+' : '') + v.toFixed(2) + '%'; };
 const date = value => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—';
 function notice(message, good = false) { const node = document.createElement('div'); node.className = `toast ${good ? 'good' : ''}`; node.textContent = message; document.body.append(node); setTimeout(() => { node.classList.add('fadeout'); setTimeout(() => node.remove(), 280); }, 2300); }
 function layout(title, content, intro = '') { document.title = `${title} · 牛股体检站`; app.innerHTML = `<section class="page"><h1>${title}</h1>${intro ? `<p class="intro">${intro}</p>` : ''}${content}</section>`; }
@@ -1034,7 +1035,7 @@ function renderZTPoolPage(data) {
     <div style="display:flex;align-items:center;gap:8px"><b>${escape(x.name)}</b><small style="color:var(--muted)">${x.code}</small><span style="margin-left:auto" class="lightdot ${x.lbc >= 3 ? 'red' : 'yellow'}">${x.lbc}板</span></div>
     <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)">
     <span>${escape(x.board)}</span><span>${escape(x.industry)}</span><span class="up">+${x.zdp}%</span><span>封单比 ${x.fundRatio ?? '—'}</span>
-    <span>换手 ${x.hs}%</span><span>量比 ${x.volumeRatio ?? '—'}</span><span>炸板 ${x.zbc}</span><span>首封 ${x.firstTime}</span>
+    <span>换手 ${number(x.hs)}%</span><span>量比 ${x.volumeRatio ?? '—'}</span><span>炸板 ${x.zbc}</span><span>首封 ${x.firstTime}</span>
     <span>${x.lhb ? '🔥龙虎榜' : ''}${x.newHigh === true ? ' 📈新高' : ''}</span>
     </div>
     </div>`).join('')}</div>` : '<p class="empty">无符合条件的涨停股</p>';
@@ -1043,9 +1044,9 @@ function renderZTPoolPage(data) {
     <td>${i + 1}</td><td>${x.code}</td><td><b>${escape(x.name)}</b></td><td>${escape(x.board)}</td><td>${escape(x.industry)}</td>
     <td><strong class="score">${x.lbc}板</strong></td>
     <td>${x.lhb ? '<b style="color:var(--red)">🔥</b>' : ''}</td>
-    <td class="up">+${x.zdp}%</td><td>${x.price}</td>
-    <td>${x.amountYi}</td><td>${x.ltszYi}</td><td>${x.hs}</td><td>${x.volumeRatio ?? '—'}</td>
-    <td>${x.fundYi}</td><td>${x.fundRatio ?? '—'}</td>
+    <td class="up">+${x.zdp}%</td><td>${number(x.price)}</td>
+    <td>${number(x.amountYi)}</td><td>${number(x.ltszYi)}</td><td>${number(x.hs)}</td><td>${x.volumeRatio ?? '—'}</td>
+    <td>${number(x.fundYi)}</td><td>${x.fundRatio ?? '—'}</td>
     <td>${x.firstTime}</td><td>${x.lastTime}</td><td>${x.zbc}</td><td>${escape(x.zttj)}</td>
     <td>${x.newHigh === true ? '📈' : ''}</td>
     </tr>`).join('')}</tbody></table></div>`;
