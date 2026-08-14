@@ -805,6 +805,18 @@ textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-glo
 .table-wrap.wide.sticky-inside thead th { position: sticky; top: 0; z-index: 3; background: var(--card); box-shadow: 0 1px 0 var(--line); }
 @media (max-width: 760px) { .table-wrap.wide.sticky-inside { max-height: none; overflow-y: visible; } }
 
+/* ========== Mobile touch targets (>=44px) ========== */
+@media (max-width: 760px) {
+  button, .primary, .outline, .button, .mini, .filters button, .suggestions button,
+  .anchor-nav button, .popular button, .fav-list button, .q-card, .cp-btn, .zt-qd {
+    min-height: 44px;
+  }
+  /* 表格内行内按钮：44px 会撑爆行高，折中 40px */
+  .mini { min-height: 40px; padding: 7px 12px; }
+  /* 图表周期切换按钮 */
+  .cp-btn { min-width: 44px; }
+}
+
 /* ========== Report anchor nav ========== */
 .anchor-nav { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 0 12px; }
 .anchor-nav button { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 99px; padding: 5px 12px; font-size: 12.5px; cursor: pointer; transition: all .15s; }
