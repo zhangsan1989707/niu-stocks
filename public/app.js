@@ -441,16 +441,13 @@ function checkPage() {
     const b = document.querySelector('#suggestions');
     if (b) { b.replaceChildren(); b.style.display = 'none'; }
   }, 150));
-  // 动态"大家都在测"：最近被体检的股票（失败回退静态）
+  // 动态"大家都在测"：最近被体检的股票（横向胶囊，失败回退静态）
   api('/recent-checks?limit=6').then(({ items }) => {
     const slot = document.querySelector('#popular-slot');
     if (!slot || !items || !items.length) return;
-    const rows = items.map(x => `<button class="pop-row" data-code="${x.code}" title="点击体检 ${escape(x.name)}">
-      <span class="pop-flame">🔥</span><b>${escape(x.name)}</b><span class="pop-code">${x.code}</span><span class="pop-score ${x.light}">${x.health}</span>
-    </button>`).join('');
-    slot.className = 'popular-list';
-    slot.innerHTML = '<div class="pop-head">🔥 大家都在测</div>' + rows;
-    slot.querySelectorAll('.pop-row').forEach(btn => btn.onclick = () => run(btn.dataset.code));
+    slot.className = 'popular';
+    slot.innerHTML = '🔥 大家在测：' + items.map(x => `<button data-code="${x.code}" title="${escape(x.name)} ${x.code} · 最近体检 ${x.health} 分">${escape(x.name)}</button>`).join('');
+    slot.querySelectorAll('button').forEach(btn => btn.onclick = () => run(btn.dataset.code));
   }).catch(() => {});
   renderFavorites();
 }
