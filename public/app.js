@@ -9,6 +9,56 @@ function card(title, body, cls='') { return `<article class="card ${cls}">${titl
 function loading() { app.innerHTML = '<section class="page"><div class="loading">正在读取市场数据…</div></section>'; }
 
 // --- 形态标签 ---
+/**
+ * 通用股票搜索联想：给任意代码输入框附加名称搜索
+ * @param {HTMLInputElement} input
+ * @param {Object} opts { onSelect: (code, name) => void }
+ */
+function attachStockSuggest(input, opts = {}) {
+  if (!input) return;
+  // 包装容器（相对定位）
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative';
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+  const box = document.createElement('div');
+  box.className = 'suggestions';
+  box.style.display = 'none';
+  wrap.appendChild(box);
+  let timer = 0, selected = false;
+  input.addEventListener('input', () => {
+    selected = false;
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const q = input.value.trim();
+      if (!q || /^\d{6}$/.test(q)) { box.replaceChildren(); box.style.display = 'none'; return; }
+      try {
+        const data = await api('/stocks/search?q=' + encodeURIComponent(q));
+        if (!data.stocks || !data.stocks.length) { box.replaceChildren(); box.style.display = 'none'; return; }
+        box.innerHTML = data.stocks.map(s => '<button data-code="' + s.code + '" data-name="' + escape(s.name) + '"><b>' + escape(s.name) + '</b><span>' + s.code + '</span></button>').join('');
+        box.style.display = '';
+        box.querySelectorAll('button').forEach(b => b.onclick = () => {
+          selected = true;
+          const code = b.dataset.code, name = b.dataset.name;
+          if (opts.onSelect) opts.onSelect(code, name);
+          else input.value = name + ' · ' + code;
+          box.replaceChildren(); box.style.display = 'none';
+        });
+      } catch { box.replaceChildren(); box.style.display = 'none'; }
+    }, 180);
+  });
+  input.addEventListener('blur', () => setTimeout(() => {
+    box.replaceChildren(); box.style.display = 'none';
+  }, 150));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && box.querySelector('button')) {
+      e.preventDefault();
+      box.querySelector('button').click();
+    }
+  });
+  return { getCode: () => (selected ? (input.value.match(/\d{6}/) || [''])[0] : (input.value.trim().match(/^\d{6}$/) || [''])[0]) };
+}
+
 function patternChips(patterns) {
   if (!patterns || !patterns.length) return '<span class="patchip neu">无明显形态</span>';
   return patterns.map(p => {
@@ -1086,7 +1136,7 @@ async function loadStocksPanel() {
         <div class="bt-form" style="margin-bottom:14px">
           <div class="bt-field">
             <label class="cfg-label" for="stk-code">代码</label>
-            <input class="cfg-input" id="stk-code" type="text" placeholder="6位代码" maxlength="6">
+            <input class="cfg-input" id="stk-code" type="text" placeholder="如 600519 / 贵州茅台" maxlength="6">
           </div>
           <div class="bt-field">
             <label class="cfg-label" for="stk-name">名称</label>
@@ -1101,8 +1151,10 @@ async function loadStocksPanel() {
           </table>
         </div>
       </article>`;
+    attachStockSuggest(panel.querySelector('#stk-code'), { onSelect: (code, name) => { panel.querySelector('#stk-code').value = name + ' · ' + code; const nm = panel.querySelector('#stk-name'); if (nm && !nm.value.trim()) nm.value = name; } });
     panel.querySelector('#stk-add').onclick = async () => {
-      const code = panel.querySelector('#stk-code').value.trim();
+      const codeInput = panel.querySelector('#stk-code');
+      const code = (codeInput.value.match(/\d{6}/) || [''])[0];
       const name = panel.querySelector('#stk-name').value.trim();
       if (!/^\d{6}$/.test(code)) return notice('请输入 6 位股票代码');
       try {
@@ -1646,7 +1698,7 @@ async function portfolioPage() {
       <div id="addPosModal" class="modal" style="display:none">
         <div class="modal-box">
           <h3>添加持仓</h3>
-          <label>股票代码 <input id="pos-code" placeholder="6位代码，如 600519" maxlength="6"></label>
+          <label>股票代码 <input id="pos-code" placeholder="如 600519 / 贵州茅台" maxlength="6"></label>
           <label>股票名称（可选，留空自动获取） <input id="pos-name" placeholder="如 贵州茅台"></label>
           <label>持仓数量 <input id="pos-shares" type="number" placeholder="100" min="1"></label>
           <label>成本价 <input id="pos-cost" type="number" placeholder="1450.50" min="0.01" step="0.01"></label>
@@ -1690,8 +1742,10 @@ async function portfolioPage() {
       await api(`/portfolio/${_editId}`, { method: 'DELETE' });
       closeEdit(); notice('已删除', true); portfolioPage();
     };
+    attachStockSuggest(document.querySelector('#pos-code'), { onSelect: (code, name) => { document.querySelector('#pos-code').value = name + ' · ' + code; const nm = document.querySelector('#pos-name'); if (nm && !nm.value.trim()) nm.value = name; } });
     document.querySelector('#pos-save').onclick = async () => {
-      const code = document.querySelector('#pos-code').value.trim();
+      const codeInput = document.querySelector('#pos-code');
+      const code = (codeInput.value.match(/\d{6}/) || [''])[0];
       const shares = document.querySelector('#pos-shares').value;
       const costPrice = document.querySelector('#pos-cost').value;
       if (!/^\d{6}$/.test(code)) return notice('请输入6位股票代码');
@@ -1789,7 +1843,7 @@ async function alertsPage() {
     <div id="alertModal" class="modal" style="display:none">
       <div class="modal-box">
         <h3>新建提醒</h3>
-        <label>股票代码 <input id="alert-code" placeholder="6位代码，如 600519" maxlength="6"></label>
+        <label>股票代码 <input id="alert-code" placeholder="如 600519 / 贵州茅台" maxlength="6"></label>
         <label>股票名称（可选） <input id="alert-name" placeholder="如 贵州茅台"></label>
         <label>提醒类型
           <select id="alert-type">
@@ -1834,8 +1888,10 @@ async function alertsPage() {
 
   document.querySelector('#addAlertBtn').onclick = () => { document.querySelector('#alertModal').style.display = 'flex'; };
   document.querySelector('#alert-cancel').onclick = () => { document.querySelector('#alertModal').style.display = 'none'; };
+  attachStockSuggest(document.querySelector('#alert-code'), { onSelect: (code, name) => { document.querySelector('#alert-code').value = name + ' · ' + code; const nm = document.querySelector('#alert-name'); if (nm && !nm.value.trim()) nm.value = name; } });
   document.querySelector('#alert-save').onclick = async () => {
-    const code = document.querySelector('#alert-code').value.trim();
+    const codeInput = document.querySelector('#alert-code');
+    const code = (codeInput.value.match(/\d{6}/) || [''])[0];
     if (!/^\d{6}$/.test(code)) return notice('请输入6位股票代码');
     const value = Number(document.querySelector('#alert-value').value);
     if (!Number.isFinite(value)) return notice('请输入有效的阈值');
@@ -1882,7 +1938,7 @@ async function notesPage() {
     <div id="noteModal" class="modal" style="display:none">
       <div class="modal-box">
         <h3>新建笔记</h3>
-        <label>股票代码 <input id="note-code" placeholder="6位代码，如 600519" maxlength="6"></label>
+        <label>股票代码 <input id="note-code" placeholder="如 600519 / 贵州茅台" maxlength="6"></label>
         <label>股票名称（可选） <input id="note-name" placeholder="如 贵州茅台"></label>
         <label>方向
           <select id="note-direction">
@@ -1914,8 +1970,10 @@ async function notesPage() {
   render();
   document.querySelector('#addNoteBtn').onclick = () => { document.querySelector('#noteModal').style.display = 'flex'; };
   document.querySelector('#note-cancel').onclick = () => { document.querySelector('#noteModal').style.display = 'none'; };
+  attachStockSuggest(document.querySelector('#note-code'), { onSelect: (code, name) => { document.querySelector('#note-code').value = name + ' · ' + code; const nm = document.querySelector('#note-name'); if (nm && !nm.value.trim()) nm.value = name; } });
   document.querySelector('#note-save').onclick = async () => {
-    const code = document.querySelector('#note-code').value.trim();
+    const codeInput = document.querySelector('#note-code');
+    const code = (codeInput.value.match(/\d{6}/) || [''])[0];
     const direction = document.querySelector('#note-direction').value;
     if (!/^\d{6}$/.test(code)) return notice('请输入6位股票代码');
     try {
