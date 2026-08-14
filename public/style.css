@@ -791,6 +791,21 @@ textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-glo
   font-size: 13px;
 }
 
+/* ========== Back to Top ========== */
+#backTopBtn {
+  position: fixed; right: 22px; bottom: 26px; z-index: 300;
+  width: 44px; height: 44px; border: 0; border-radius: 50%;
+  background: var(--blue); color: #fff; font-size: 20px; font-weight: 700;
+  cursor: pointer; box-shadow: 0 6px 20px rgba(79,108,174,.35);
+  opacity: 0; transform: translateY(12px); pointer-events: none;
+  transition: opacity .25s, transform .25s;
+}
+#backTopBtn.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+#backTopBtn:hover { filter: brightness(1.08); }
+@media (max-width: 760px) {
+  #backTopBtn { right: 14px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: 40px; height: 40px; font-size: 18px; }
+}
+
 /* ========== Toast ========== */
 .toast {
   position: fixed;

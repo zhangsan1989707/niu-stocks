@@ -2253,6 +2253,24 @@ AlertNotifier.init();
   window.addEventListener('hashchange', close);
 })();
 
+// --- 回到顶部按钮（全局） ---
+(function initBackTop() {
+  const btn = document.createElement('button');
+  btn.id = 'backTopBtn';
+  btn.title = '回到顶部';
+  btn.innerHTML = '↑';
+  btn.setAttribute('aria-label', '回到顶部');
+  document.body.appendChild(btn);
+  let visible = false;
+  const toggle = () => {
+    const show = window.scrollY > 500;
+    if (show !== visible) { visible = show; btn.classList.toggle('show', show); }
+  };
+  window.addEventListener('scroll', toggle, { passive: true });
+  toggle();
+  btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+})();
+
 // --- 宽表鼠标拖拽横向滚动（P2-15）---
 (function initDragScroll() {
   let suppressClick = false;
