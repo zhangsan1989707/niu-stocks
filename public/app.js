@@ -1165,8 +1165,11 @@ async function backtestPage() {
       <p class="muted">基于 MACD 金叉/死叉信号模拟历史交易回测，包含交易费用、滑点与买入持有基准比较；不等同于体检分策略验证。</p>
       <div class="bt-form">
         <div class="bt-field">
-          <label class="cfg-label" for="bt-code">股票代码</label>
-          <input class="cfg-input" id="bt-code" type="text" placeholder="如 600519" maxlength="6" value="">
+          <label class="cfg-label" for="bt-code">股票（支持名称/代码搜索）</label>
+          <div class="bt-search" style="position:relative">
+            <input class="cfg-input" id="bt-code" type="text" placeholder="如 600519 / 贵州茅台" value="">
+            <div id="bt-suggest" class="suggestions"></div>
+          </div>
         </div>
         <div class="bt-field">
           <label class="cfg-label" for="bt-days">回测天数</label>
@@ -1199,19 +1202,48 @@ async function backtestPage() {
 
   // 尝试填充当前选中股票
   const cur = document.querySelector('#stockSelect');
+  let btSelected = '';
   if (cur && cur.value) {
     const inp = document.querySelector('#bt-code');
     if (inp) inp.value = cur.value;
   }
+  // 中文/名称搜索联想（同个股体检）
+  const btInput = document.querySelector('#bt-code');
+  let btTimer = 0;
+  btInput.addEventListener('input', () => {
+    btSelected = '';
+    clearTimeout(btTimer);
+    btTimer = setTimeout(async () => {
+      const q = btInput.value.trim();
+      const box = document.querySelector('#bt-suggest');
+      if (!q) { box.replaceChildren(); box.style.display = 'none'; return; }
+      if (/^\d{6}$/.test(q)) { box.replaceChildren(); box.style.display = 'none'; return; }
+      try {
+        const data = await api('/stocks/search?q=' + encodeURIComponent(q));
+        if (!data.stocks || !data.stocks.length) { box.replaceChildren(); box.style.display = 'none'; return; }
+        box.innerHTML = data.stocks.map(s => '<button data-code="' + s.code + '"><b>' + escape(s.name) + '</b><span>' + s.code + '</span></button>').join('');
+        box.style.display = '';
+        box.querySelectorAll('button').forEach(b => b.onclick = () => {
+          btSelected = b.dataset.code;
+          btInput.value = b.querySelector('b').textContent + ' · ' + b.dataset.code;
+          box.replaceChildren(); box.style.display = 'none';
+        });
+      } catch { box.replaceChildren(); box.style.display = 'none'; }
+    }, 180);
+  });
+  btInput.addEventListener('blur', () => setTimeout(() => {
+    const box = document.querySelector('#bt-suggest');
+    if (box) { box.replaceChildren(); box.style.display = 'none'; }
+  }, 150));
 
   const runBtn = document.querySelector('#bt-run');
   const resultDiv = document.querySelector('#bt-result');
 
   runBtn.onclick = async () => {
-    const code = document.querySelector('#bt-code').value.trim();
+    const code = (btSelected || document.querySelector('#bt-code').value.trim());
     const days = document.querySelector('#bt-days').value;
     const strategy = document.querySelector('#bt-strategy').value;
-    if (!/^\d{6}$/.test(code)) { notice('请输入 6 位股票代码'); return; }
+    if (!/^\d{6}$/.test(code)) { notice('请选择股票（支持输入名称搜索）或输入 6 位代码'); return; }
 
     runBtn.disabled = true;
     runBtn.textContent = '回测中…';
