@@ -1333,6 +1333,15 @@ async function backtestPage() {
         const pts = vals.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v.nav).toFixed(1)).join(' ');
         curve = '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%;height:auto;background:var(--bg);border-radius:8px;margin:8px 0"><polyline points="' + pts + '" fill="none" stroke="#4f6cae" stroke-width="1.8"/><text x="' + pad + '" y="' + (h - 2) + '" font-size="9" fill="#94a3b8">' + vals[0].date + '</text><text x="' + (w - pad) + '" y="' + (h - 2) + '" font-size="9" fill="#94a3b8" text-anchor="end">' + vals[vals.length - 1].date + '</text></svg>';
       }
+      let ddCurve = '';
+      if (r.drawdownCurve && r.drawdownCurve.length >= 2) {
+        const vals = r.drawdownCurve, w = 760, h = 70, pad = 8;
+        const mn = Math.min(...vals.map(v => v.dd)) * 1.05, mx = 0;
+        const X = i => pad + (i / (vals.length - 1)) * (w - pad * 2);
+        const Y = v => h - pad - ((v - mn) / ((mx || 1) - mn)) * (h - pad * 2);
+        const pts = vals.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v.dd).toFixed(1)).join(' ');
+        ddCurve = '<div style="font-size:12px;color:var(--muted);margin-top:6px">回撤曲线（最大 ' + r.maxDrawdown + '%）</div><svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%;height:auto;background:var(--bg);border-radius:8px"><polyline points="' + pts + '" fill="none" stroke="var(--green,#27ae60)" stroke-width="1.4"/></svg>';
+      }
       const tradesHtml = r.trades.length ? '<div class="table-wrap wide" style="margin-top:10px"><table><thead><tr><th>代码</th><th>名称</th><th>买入日</th><th>卖出日</th><th>买入价</th><th>卖出价</th><th>收益</th></tr></thead><tbody>' + r.trades.map(x => '<tr><td>' + x.code + '</td><td>' + escape(x.name) + '</td><td>' + x.entryDate + '</td><td>' + x.exitDate + '</td><td>' + x.entryPrice + '</td><td>' + x.exitPrice + '</td><td style="color:' + (x.ret >= 0 ? 'var(--red,#c0392b)' : 'var(--green,#27ae60)') + '">' + (x.ret >= 0 ? '+' : '') + x.ret + '%</td></tr>').join('') + '</tbody></table></div>' : '';
       pbResult.innerHTML = card('组合回测结果 · Top' + topN + ' 等权 / 持有 ' + holdDays + ' 期', `
         <div class="bt-stats">
@@ -1345,6 +1354,7 @@ async function backtestPage() {
           ${metric('已平仓', r.closedTrades + ' 笔', 'var(--muted)')}
         </div>
         ${curve}
+        ${ddCurve}
         ${r.note ? '<p class="report-note" style="color:var(--amber)">' + escape(r.note) + '</p>' : ''}
         ${tradesHtml}
         <p style="color:var(--muted);font-size:12px;margin-top:8px">${escape(r.disclaimer)}</p>`);
