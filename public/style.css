@@ -291,6 +291,23 @@ p { margin: 8px 0; line-height: 1.7; text-wrap: pretty; }
 
 .full { display: block; width: 100%; margin-top: 16px; }
 
+/* ========== Popular List（大家都在测） ========== */
+.popular-list { margin: 12px 0; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 6px; box-shadow: var(--shadow-sm); }
+.pop-head { font-size: 13px; font-weight: 700; color: var(--ink-soft); padding: 4px 12px 8px; }
+.pop-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; padding: 8px 12px; cursor: pointer; font: inherit; text-align: left; border-radius: 8px; transition: background .12s; }
+.pop-row:hover { background: var(--blue-soft); }
+.pop-flame { font-size: 13px; flex-shrink: 0; }
+.pop-row b { font-size: 14px; color: var(--ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pop-code { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.pop-score { font-size: 11px; font-weight: 800; border-radius: 10px; padding: 1px 8px; font-family: var(--mono); }
+.pop-score.green { background: var(--good-soft); color: var(--good); }
+.pop-score.yellow { background: var(--amber-soft); color: var(--amber); }
+.pop-score.red { background: var(--red-soft); color: var(--red); }
+@media (max-width: 760px) {
+  .pop-row { padding: 7px 10px; }
+  .pop-row b { font-size: 13px; }
+}
+
 /* ========== Quick Cards（快捷入口） ========== */
 .quick-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
 .q-card { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; text-decoration: none; color: var(--ink); box-shadow: var(--shadow-sm); transition: box-shadow .15s, transform .15s; }

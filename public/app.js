@@ -385,7 +385,7 @@ function checkPage() {
       <a class="q-card" href="#/screen"><span class="q-icon" style="background:var(--amber-soft);color:var(--amber)">🎯</span><div><b>选股</b><small>回春法候选</small></div></a>
       <a class="q-card" href="#/smart"><span class="q-icon" style="background:var(--good-soft);color:var(--good)">🧠</span><div><b>智能选股</b><small>全市场三层漏斗</small></div></a>
     </div>
-    <div class="popular">🔥 大家在测：${[['600392','盛和资源'],['601138','工业富联'],['000021','深科技'],['002594','比亚迪'],['600519','贵州茅台']].map(([c,n]) => `<button data-code="${c}">${n}</button>`).join('')}</div>
+    <div class="popular" id="popular-slot">🔥 大家都在测：<button data-code="600392">盛和资源</button><button data-code="601138">工业富联</button><button data-code="000021">深科技</button><button data-code="002594">比亚迪</button><button data-code="600519">贵州茅台</button></div>
     <div id="scan-slot"></div><div id="report-slot"></div><div id="favorites"></div>`);
   const input = document.querySelector('#stock-input'); let selectedCode = '';
   const run = async code => {
@@ -441,6 +441,17 @@ function checkPage() {
     const b = document.querySelector('#suggestions');
     if (b) { b.replaceChildren(); b.style.display = 'none'; }
   }, 150));
+  // 动态"大家都在测"：最近被体检的股票（失败回退静态）
+  api('/recent-checks?limit=6').then(({ items }) => {
+    const slot = document.querySelector('#popular-slot');
+    if (!slot || !items || !items.length) return;
+    const rows = items.map(x => `<button class="pop-row" data-code="${x.code}" title="点击体检 ${escape(x.name)}">
+      <span class="pop-flame">🔥</span><b>${escape(x.name)}</b><span class="pop-code">${x.code}</span><span class="pop-score ${x.light}">${x.health}</span>
+    </button>`).join('');
+    slot.className = 'popular-list';
+    slot.innerHTML = '<div class="pop-head">🔥 大家都在测</div>' + rows;
+    slot.querySelectorAll('.pop-row').forEach(btn => btn.onclick = () => run(btn.dataset.code));
+  }).catch(() => {});
   renderFavorites();
 }
 
