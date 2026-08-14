@@ -800,6 +800,11 @@ textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-glo
 }
 #scrollProgress.show { opacity: 1; }
 
+/* ========== Sticky header inside scroll container (zt only) ========== */
+.table-wrap.wide.sticky-inside { max-height: min(68vh, 760px); overflow-y: auto; }
+.table-wrap.wide.sticky-inside thead th { position: sticky; top: 0; z-index: 3; background: var(--card); box-shadow: 0 1px 0 var(--line); }
+@media (max-width: 760px) { .table-wrap.wide.sticky-inside { max-height: none; overflow-y: visible; } }
+
 /* ========== Skeleton ========== */
 .skel { position: relative; overflow: hidden; background: var(--line); border-radius: 6px; }
 .skel::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%);

@@ -1,5 +1,13 @@
 const app = document.querySelector('#app');
-const api = (path, options = {}) => fetch(`/api${path}`, { headers: { 'content-type': 'application/json', ...(options.headers || {}) }, ...options }).then(async r => { const data = await r.json(); if (!r.ok) throw new Error(data.error || '请求失败'); return data; });
+const api = (path, options = {}, _retry = 0) => fetch(`/api${path}`, { headers: { 'content-type': 'application/json', ...(options.headers || {}) }, ...options }).then(async r => { const data = await r.json(); if (!r.ok) throw new Error(data.error || '请求失败'); return data; }).catch(async e => {
+  // GET 失败自动重试 1 次（腾讯接口 501 限流常见）；POST 不重试避免重复提交
+  const isGet = !options.method || options.method === 'GET';
+  if (isGet && _retry < 1) {
+    await new Promise(r => setTimeout(r, 1200));
+    return api(path, options, _retry + 1);
+  }
+  throw e;
+});
 const escape = value => String(value ?? '').replace(/[&<>"']/g, x => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' })[x]);
 const number = value => Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
 const date = value => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—';
@@ -1031,7 +1039,7 @@ function renderZTPoolPage(data) {
     </div>
     </div>`).join('')}</div>` : '<p class="empty">无符合条件的涨停股</p>';
     } else {
-    document.querySelector('#zt-result').innerHTML = `<div class="table-wrap wide"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>板块</th><th>行业</th><th data-sort="lbc" style="cursor:pointer" title="点击排序">连板 ⇅</th><th>龙虎榜</th><th data-sort="zdp" style="cursor:pointer" title="点击排序">涨跌幅 ⇅</th><th>最新价</th><th data-sort="amountYi" style="cursor:pointer" title="点击排序">成交额(亿) ⇅</th><th>流通市值(亿)</th><th data-sort="hs" style="cursor:pointer" title="点击排序">换手% ⇅</th><th data-sort="volumeRatio" style="cursor:pointer" title="点击排序">量比 ⇅</th><th data-sort="fundYi" style="cursor:pointer" title="点击排序">封单(亿) ⇅</th><th>封单/成交</th><th data-sort="firstTime" style="cursor:pointer" title="点击排序">首封 ⇅</th><th>末封</th><th data-sort="zbc" style="cursor:pointer" title="点击排序">炸板 ⇅</th><th>涨停统计</th><th>新高</th></tr></thead><tbody>${visible.map((x, i) => `<tr data-code="${x.code}">
+    document.querySelector('#zt-result').innerHTML = `<div class="table-wrap wide sticky-inside"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>板块</th><th>行业</th><th data-sort="lbc" style="cursor:pointer" title="点击排序">连板 ⇅</th><th>龙虎榜</th><th data-sort="zdp" style="cursor:pointer" title="点击排序">涨跌幅 ⇅</th><th>最新价</th><th data-sort="amountYi" style="cursor:pointer" title="点击排序">成交额(亿) ⇅</th><th>流通市值(亿)</th><th data-sort="hs" style="cursor:pointer" title="点击排序">换手% ⇅</th><th data-sort="volumeRatio" style="cursor:pointer" title="点击排序">量比 ⇅</th><th data-sort="fundYi" style="cursor:pointer" title="点击排序">封单(亿) ⇅</th><th>封单/成交</th><th data-sort="firstTime" style="cursor:pointer" title="点击排序">首封 ⇅</th><th>末封</th><th data-sort="zbc" style="cursor:pointer" title="点击排序">炸板 ⇅</th><th>涨停统计</th><th>新高</th></tr></thead><tbody>${visible.map((x, i) => `<tr data-code="${x.code}">
     <td>${i + 1}</td><td>${x.code}</td><td><b>${escape(x.name)}</b></td><td>${escape(x.board)}</td><td>${escape(x.industry)}</td>
     <td><strong class="score">${x.lbc}板</strong></td>
     <td>${x.lhb ? '<b style="color:var(--red)">🔥</b>' : ''}</td>
@@ -2313,7 +2321,7 @@ AlertNotifier.init();
   };
   window.addEventListener('scroll', toggle, { passive: true });
   toggle();
-  btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  btn.addEventListener('click', () => { window.scrollTo({ top: 0, behavior: 'smooth' }); document.querySelectorAll('.table-wrap.wide.sticky-inside').forEach(w => { w.scrollTop = 0; }); });
 })();
 
 // --- 顶部滚动进度条（全局） ---
