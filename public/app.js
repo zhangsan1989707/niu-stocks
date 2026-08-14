@@ -1062,8 +1062,8 @@ function renderZTPoolPage(data) {
   // 渲染涨停列表（表格/卡片/梯队）——供过滤与排序共用
   const renderZT = rows => {
     const isMobile = window.innerWidth < 760;
-    if (isMobile) {
     const visible = rows.slice(0, ztShown);
+    if (isMobile) {
     document.querySelector('#zt-result').innerHTML = visible.length ? `<div class="smart-cards">${visible.map(x => `
     <div class="smart-card" data-code="${x.code}">
     <div style="display:flex;align-items:center;gap:8px"><b>${escape(x.name)}</b><small style="color:var(--muted)">${x.code}</small><span style="margin-left:auto" class="lightdot ${x.lbc >= 3 ? 'red' : 'yellow'}">${x.lbc}板</span></div>
