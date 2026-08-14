@@ -638,6 +638,30 @@ function renderReport(data) {
   }
   document.querySelector('#favorite')?.addEventListener('click', async () => { try { await api('/favorites', { method:'POST', body:JSON.stringify({code:data.code,name:data.name}) }); notice('已加入自选', true); } catch (e) { notice(e.message); } });
   renderFavorites();
+
+  // 分数区间历史表现（score-lookback）
+  (async () => {
+    const slot = document.querySelector('#sec-lookback-slot');
+    if (!slot) return;
+    slot.innerHTML = '<div class="seclbl" style="color:var(--muted)">📊 分数区间历史表现加载中…</div>';
+    try {
+      const lb = await api('/score-lookback');
+      if (!lb.ok || !lb.samples) { slot.innerHTML = ''; return; }
+      const b = (lb.buckets || []).find(x => data.health >= Number(x.label.split('-')[0].replace('<', '0')) && data.health < (x.label.includes('+') ? 101 : Number(x.label.split('-')[1] || 101)));
+      const tr = (s, d) => s && s[d] != null ? `<td class="${s[d].avg >= 0 ? 'up' : 'down'}">${s[d].avg >= 0 ? '+' : ''}${s[d].avg}%</td><td>${s[d].win}%</td><td>${s[d].n}</td>` : '<td>—</td><td>—</td><td>—</td>';
+      const rowsHtml = (lb.buckets || []).map(x => {
+        const isMe = b && x.label === b.label;
+        return `<tr style="${isMe ? 'background:var(--blue-soft)' : ''}"><td><b>${x.label}</b>${isMe ? ' ← 本股' : ''}</td>${tr(x, 'd1')}${tr(x, 'd5')}${tr(x, 'd10')}</tr>`;
+      }).join('');
+      const icLine = lb.ic && lb.ic.d5 != null
+        ? `<p class="report-note">全样本 IC：T+5 ${lb.ic.d5 >= 0 ? '+' : ''}${lb.ic.d5.toFixed(3)}（${Math.abs(lb.ic.d5) > 0.05 ? '评分有区分度' : '区分度弱'}）· 样本 ${lb.samples} 个 · 更新 ${new Date(lb.ts).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>`
+        : '';
+      const note = b && b.n < 5 ? `<p class="report-note">⚠️ 本股所在区间样本偏少（${b.n} 个），统计参考价值有限</p>` : '';
+      slot.innerHTML = card('📊 分数区间历史表现（历史选股名单 T+1/5/10）',
+        `<div class="table-wrap wide"><table><thead><tr><th>分数区间</th><th colspan="3">T+1</th><th colspan="3">T+5</th><th colspan="3">T+10</th></tr><tr><th></th><th>收益</th><th>胜率</th><th>样本</th><th>收益</th><th>胜率</th><th>样本</th><th>收益</th><th>胜率</th><th>样本</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>${icLine}${note}`,
+        'report-card', 'sec-lookback');
+    } catch { slot.innerHTML = ''; }
+  })();
 }
 
 async function renderFavorites() {
