@@ -465,7 +465,12 @@ function checkPage() {
     reportSlot.innerHTML = '';
     const _tk = Date.now();
     const fetchP = api(`/stocks/${target}/report`).then(j => ({ j }));
-    const { j, aborted } = await playScanAnim(scanSlot, fetchP, { title: '个股体检中', alive: () => true });
+    // C2: 快速模式（第 3 次体检后默认跳过动画）
+    let fastMode = false;
+    try { const c = Number(localStorage.getItem('leostocks_checks') || 0); localStorage.setItem('leostocks_checks', String(c + 1)); fastMode = c >= 2; } catch {}
+    let j = null, aborted = false;
+    if (fastMode) { try { j = await api(`/stocks/${target}/report`); } catch { j = null; } }
+    else { const r = await playScanAnim(scanSlot, fetchP, { title: '个股体检中', alive: () => true }); j = r.j; aborted = r.aborted; }
     if (aborted) return;
     if (!j) { notice('体检失败，请稍后重试'); return; }
     renderReport(j);
@@ -1023,7 +1028,7 @@ function renderZTPoolPage(data) {
           </div>
         </div>`).join('')}</div>` : '<p class="empty">无符合条件的涨停股</p>';
     } else {
-      document.querySelector('#zt-result').innerHTML = `<div class="table-wrap wide"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>板块</th><th>行业</th><th>连板</th><th>龙虎榜</th><th>涨跌幅</th><th>最新价</th><th>成交额(亿)</th><th>流通市值(亿)</th><th>换手%</th><th>量比</th><th>封单(亿)</th><th>封单/成交</th><th>首封</th><th>末封</th><th>炸板</th><th>涨停统计</th><th>新高</th></tr></thead><tbody>${rows.map((x, i) => `<tr data-code="${x.code}">
+      document.querySelector('#zt-result').innerHTML = `<div class="table-wrap wide"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>板块</th><th>行业</th><th data-sort="lbc" style="cursor:pointer" title="点击排序">连板 ⇅</th><th>龙虎榜</th><th data-sort="zdp" style="cursor:pointer" title="点击排序">涨跌幅 ⇅</th><th>最新价</th><th data-sort="amountYi" style="cursor:pointer" title="点击排序">成交额(亿) ⇅</th><th>流通市值(亿)</th><th data-sort="hs" style="cursor:pointer" title="点击排序">换手% ⇅</th><th data-sort="volumeRatio" style="cursor:pointer" title="点击排序">量比 ⇅</th><th data-sort="fundYi" style="cursor:pointer" title="点击排序">封单(亿) ⇅</th><th>封单/成交</th><th data-sort="firstTime" style="cursor:pointer" title="点击排序">首封 ⇅</th><th>末封</th><th data-sort="zbc" style="cursor:pointer" title="点击排序">炸板 ⇅</th><th>涨停统计</th><th>新高</th></tr></thead><tbody>${rows.map((x, i) => `<tr data-code="${x.code}">
         <td>${i + 1}</td><td>${x.code}</td><td><b>${escape(x.name)}</b></td><td>${escape(x.board)}</td><td>${escape(x.industry)}</td>
         <td><strong class="score">${x.lbc}板</strong></td>
         <td>${x.lhb ? '<b style="color:var(--red)">🔥</b>' : ''}</td>
@@ -1043,6 +1048,22 @@ function renderZTPoolPage(data) {
     }).join('');
     document.querySelector('#zt-ladder').innerHTML = ladderHtml ? `<div class="checkdone">📶 连板梯队：${ladderHtml}</div>` : '';
   };
+  // B2: 列排序
+  let ztSortKey = '', ztSortDir = 1;
+  const ztTable = document.querySelector('#zt-result');
+  if (ztTable) ztTable.addEventListener('click', e => {
+    const th = e.target.closest('th[data-sort]');
+    if (!th) return;
+    const key = th.dataset.sort;
+    if (ztSortKey === key) ztSortDir = -ztSortDir; else { ztSortKey = key; ztSortDir = key === 'firstTime' ? 1 : -1; }
+    const sorted = [...currentRows].sort((a, b) => {
+      const va = a[key] == null ? -Infinity : a[key], vb = b[key] == null ? -Infinity : b[key];
+      if (typeof va === 'string') return ztSortDir * va.localeCompare(vb);
+      return ztSortDir * (va - vb);
+    });
+    currentRows = sorted;
+    applyFilter();
+  });
   applyFilter();
 
   document.querySelector('#zt-minlbc').onchange = applyFilter;
@@ -2080,8 +2101,15 @@ function router() {
     } catch {}
   }
 }
-loadIndices();
-setInterval(loadIndices, 60000);
+// A4: 轮询仅在页面含指数栏时运行
+let _idxTimer = null;
+function ensureIndicesPolling() {
+  const hasBar = !!document.querySelector('#indices-bar');
+  if (hasBar && !_idxTimer) { loadIndices(); _idxTimer = setInterval(loadIndices, 60000); }
+  if (!hasBar && _idxTimer) { clearInterval(_idxTimer); _idxTimer = null; }
+}
+ensureIndicesPolling();
+window.addEventListener('hashchange', () => setTimeout(ensureIndicesPolling, 300));
 router(); window.addEventListener('hashchange', router);
 
 // 导航栏点击：当 hash 相同时强制刷新页面（解决"已在体检页点导航回不去"问题）
