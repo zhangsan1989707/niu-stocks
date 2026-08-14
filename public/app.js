@@ -33,7 +33,7 @@ function restoreScroll(delay = 300) {
     if (v != null) setTimeout(() => window.scrollTo(0, Number(v) || 0), delay);
   } catch {}
 }
-function card(title, body, cls='') { return `<article class="card ${cls}">${title ? `<h2>${title}</h2>` : ''}${body}</article>`; }
+function card(title, body, cls='', id='') { return `<article class="card ${cls}"${id ? ` id="${id}"` : ''}>${title ? `<h2>${title}</h2>` : ''}${body}</article>`; }
 function loading() { app.innerHTML = '<section class="page"><div class="loading">正在读取市场数据…</div></section>'; }
 // 骨架屏生成器
 function skeletonTable(rows) {
@@ -572,12 +572,19 @@ function renderReport(data) {
   const patScoreHtml = patternPts !== 0 ? `<span style="font-weight:800;font-family:ui-monospace,monospace;color:${patternPts > 0 ? 'var(--good)' : 'var(--red)'}">（计 ${patternPts > 0 ? '+' + patternPts : patternPts} 分）</span>` : '';
 
   layout('个股体检', `
+  // 锚点目录点击
+  setTimeout(() => {
+    document.querySelectorAll('.anchor-nav button').forEach(b => b.onclick = () => {
+      const el = document.getElementById(b.dataset.sec);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, 0);
     <div class="result-title"><div><h2>${escape(data.name)} <small>${data.code}</small></h2><p>数据更新时间：${escape(data.quote.updatedAt || data.last_date || '最近交易日')}</p></div><button id="back" class="outline">重新体检</button></div>
     <div class="verdict ${data.light}"><div class="em">${lightMeta.em}</div><div><div class="vt">${data.band} · ${lightMeta.w}</div><div class="vs">${escape(data.headline || data.summary)}${data.is_powei && data.powei_reason ? '<br><b>说人话：</b>' + escape(data.powei_reason) + '，破位用<b>收盘价</b>判定，是真跌不是盘中假摔。' : ''}</div></div></div>
     <div class="health ${data.light}"><div class="hnum">${data.health}<small>/100</small></div><div class="hmid"><div class="hband">技术健康分 · ${data.band}</div><div class="hbar"><span class="mk" style="left:${data.health}%"></span></div><div class="hticks"><span>0 危险</span><span>45</span><span>65</span><span>健康 100</span></div></div></div>
     <div class="calcnote">${calcNote}</div>
     <div class="checkdone">✓ 已逐项核验 ${data.pat_scanned || 29} 种蜡烛形态 ＋ 12 类技术维度</div>
-    <div class="report-grid"><article class="card"><h2>趋势与价格</h2>
+    <div class="report-grid"><article class="card" id="sec-chart"><h2>趋势与价格</h2>
     <div class="chart-periods" style="display:flex;gap:6px;margin-bottom:10px"><button class="cp-btn active" data-period="day">日线</button><button class="cp-btn" data-period="week">周线</button><button class="cp-btn" data-period="month">月线</button></div>
     <div id="chart" class="chart"></div>
     <div class="legend"><i><span style="background:#d8584d"></span>红=涨</i><i><span style="background:#3a9e6e"></span>绿=跌</i><i><span class="line" style="background:#4f6cae"></span>蓝线=MA60</i><i><span class="line" style="background:#c9922e"></span>金线=均量5</i><i><span style="background:#d8584d"></span>红虚线=支撑</i><i><span style="background:#9aa6bd"></span>灰虚线=压力</i></div>
@@ -590,11 +597,14 @@ function renderReport(data) {
       <div class="metric"><div class="ml">量比</div><div class="mv">${data.vol_ratio != null ? number(data.vol_ratio) : '—'}</div><div class="ms">${(data.vol_ratio || 0) >= 1.5 ? '放量' : '常态'}</div></div>
     </div>
     <p class="summary">📍 <b>支撑位</b>＝下方「地板」（前期低点，跌到附近常有资金接盘托一下，是值得关注的<b>观察位</b>）；<b>压力位</b>＝上方「天花板」（前期高点，涨到附近常遇套牢盘抛压、容易回落，是需要留意的<b>风险位</b>）。仅为技术位置提示，不构成买卖建议。</p></article>
-    <article class="card"><h2>体检结论</h2>
+    <article class="card" id="sec-verdict"><h2>体检结论</h2>
     <div class="conclusion-row">
     <p class="signal ${data.light === 'green' ? 'positive' : data.light === 'red' ? 'negative' : ''}">● ${data.band}</p>
     <dl class="conclusion-metrics"><dt>MA20</dt><dd>${number(data.metrics?.ma20)}</dd><dt>MA60</dt><dd>${number(data.metrics?.ma60)}</dd><dt>MACD</dt><dd>${number(data.metrics?.macd)}</dd><dt>RSI</dt><dd>${number(data.metrics?.rsi)}</dd></dl>
     <button id="favorite" class="primary">收藏到自选</button></div></article></div>
+    <div class="anchor-nav">
+      <button data-sec="sec-chart">K线</button><button data-sec="sec-verdict">结论</button><button data-sec="sec-pattern">形态/维度</button><button data-sec="sec-murphy">摆动</button><button data-sec="sec-classic">经典形态</button><button data-sec="sec-consult">四方会诊</button><button data-sec="sec-history">历史</button><button data-sec="sec-multi">多周期</button>
+    </div>
     <div class="scanhdr">🔬 体检共 <b>${(data.pat_scanned || 29) + 10 + 7 + 5}</b> 项 = <b>①${data.pat_scanned || 29} 种蜡烛形态</b>（下方「命中形态」列出命中的，没命中=没出现）＋ <b>②技术维度展开 ${10 + 7 + 5} 项</b>（10 类核心 + 墨菲摆动指标 7 项 + 经典图表形态 5 类，下方逐项全列）。带分数=这次影响了评分，带「·」=查过、正常。</div>
     ${card('', `<div class="seclbl">① 蜡烛形态 · 已扫 ${data.pat_scanned || 29} 种，命中 ${data.pat_hit || 0} 种 ${patScoreHtml}</div><div class="pats" style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 0 14px">${patternChips(data.patterns)}</div><div class="seclbl">② 技术维度 · 12 类（全部都扫了）</div>${data.scan_dims.map(d => {
     const desc = SCAN_DIM_DESC[d.key];
@@ -605,11 +615,11 @@ function renderReport(data) {
     const badge = pts > 0 ? '+' + pts : pts < 0 ? '' + pts : '·';
     return `<div class="dimrow2 ${cls} has-tip" ${tt}><span class="fpts ${pts ? '' : 'idle'}">${badge}</span><span class="dn">${escape(d.name)}</span><span class="dwhy">${escape(d.note)}</span></div>`;
   }).join('')}`, 'report-card')}
-    ${card('摆动指标组', renderMurphy(data.murphy), 'report-card')}
-    ${card('经典图表形态', renderClassicPatterns(data.patterns_classic), 'report-card')}
-    ${card('四方会诊', renderConsult(data.consult), 'report-card')}
-    ${card('体检历史', renderCheckHistory(data.code), 'report-card')}
-    ${data.multiPeriod && data.multiPeriod.sufficient ? card('多周期分析', renderMultiPeriod(data.multiPeriod), 'report-card') : ''}
+    ${card('摆动指标组', renderMurphy(data.murphy), 'report-card', 'sec-murphy')}
+    ${card('经典图表形态', renderClassicPatterns(data.patterns_classic), 'report-card', 'sec-classic')}
+    ${card('四方会诊', renderConsult(data.consult), 'report-card', 'sec-consult')}
+    ${card('体检历史', renderCheckHistory(data.code), 'report-card', 'sec-history')}
+    ${data.multiPeriod && data.multiPeriod.sufficient ? card('多周期分析', renderMultiPeriod(data.multiPeriod), 'report-card', 'sec-multi') : ''}
     <div id="favorites"></div>`);
   document.querySelector('#back').onclick = () => { location.hash = '#/check'; checkPage(); };
   const chartEl = document.querySelector('#chart');
