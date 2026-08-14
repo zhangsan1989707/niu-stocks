@@ -990,7 +990,7 @@ function renderZTPoolPage(data) {
   const boardHtml = '<button class="zt-filter" data-board="全部">全部</button>' + ZT_BOARDS.slice(1).map(b => `<button class="zt-filter" data-board="${b}">${b}</button>`).join('');
   layout('涨停股池', `<p class="intro">当日 A 股涨停一览（东方财富公开接口）：连板梯队、封板强度、龙虎榜、60日新高，点击行进入个股体检。数据日期：${data.date}${data.cached ? '（缓存）' : ''}${data.date !== new Date().toISOString().slice(0,10).replace(/-/g,'') ? ' · ⚠️ 非今日数据，点击 ↻ 刷新获取最新' : ''}${data.prevDate ? ' · 昨日池参考：' + data.prevDate : ''}</p>
     <div class="port-toolbar">
-      <div style="display:flex;align-items:center;gap:6px"><span style="font-size:13px;color:var(--muted)">日期</span><input type="date" id="zt-date" max="${new Date().toISOString().slice(0,10)}" value="${data.date.slice(0,4)}-${data.date.slice(4,6)}-${data.date.slice(6,8)}" style="border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;background:var(--card)"></div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">日期</span><input type="date" id="zt-date" max="${new Date().toISOString().slice(0,10)}" value="${data.date.slice(0,4)}-${data.date.slice(4,6)}-${data.date.slice(6,8)}" style="border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;background:var(--card)"><span id="zt-quick-dates"></span></div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">连板≥</span><select id="zt-minlbc" style="border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;background:var(--card)"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
       <span id="zt-board-filters" style="display:flex;gap:6px;flex-wrap:wrap">${boardHtml}</span>
       <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)"><input type="checkbox" id="zt-lhb"> 仅龙虎榜</label>
@@ -1005,11 +1005,14 @@ function renderZTPoolPage(data) {
     <p style="color:var(--muted);font-size:12.5px">⚠️ ${escape(data.disclaimer || '仅供研究')}</p>`);
 
   let currentRows = pool;
+  // 涨停分页状态
+  let ztShown = 30; const ZT_PAGE = 30;
   // 渲染涨停列表（表格/卡片/梯队）——供过滤与排序共用
   const renderZT = rows => {
     const isMobile = window.innerWidth < 760;
     if (isMobile) {
-    document.querySelector('#zt-result').innerHTML = rows.length ? `<div class="smart-cards">${rows.map(x => `
+    const visible = rows.slice(0, ztShown);
+    document.querySelector('#zt-result').innerHTML = visible.length ? `<div class="smart-cards">${visible.map(x => `
     <div class="smart-card" data-code="${x.code}">
     <div style="display:flex;align-items:center;gap:8px"><b>${escape(x.name)}</b><small style="color:var(--muted)">${x.code}</small><span style="margin-left:auto" class="lightdot ${x.lbc >= 3 ? 'red' : 'yellow'}">${x.lbc}板</span></div>
     <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)">
@@ -1019,7 +1022,7 @@ function renderZTPoolPage(data) {
     </div>
     </div>`).join('')}</div>` : '<p class="empty">无符合条件的涨停股</p>';
     } else {
-    document.querySelector('#zt-result').innerHTML = `<div class="table-wrap wide"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>板块</th><th>行业</th><th data-sort="lbc" style="cursor:pointer" title="点击排序">连板 ⇅</th><th>龙虎榜</th><th data-sort="zdp" style="cursor:pointer" title="点击排序">涨跌幅 ⇅</th><th>最新价</th><th data-sort="amountYi" style="cursor:pointer" title="点击排序">成交额(亿) ⇅</th><th>流通市值(亿)</th><th data-sort="hs" style="cursor:pointer" title="点击排序">换手% ⇅</th><th data-sort="volumeRatio" style="cursor:pointer" title="点击排序">量比 ⇅</th><th data-sort="fundYi" style="cursor:pointer" title="点击排序">封单(亿) ⇅</th><th>封单/成交</th><th data-sort="firstTime" style="cursor:pointer" title="点击排序">首封 ⇅</th><th>末封</th><th data-sort="zbc" style="cursor:pointer" title="点击排序">炸板 ⇅</th><th>涨停统计</th><th>新高</th></tr></thead><tbody>${rows.map((x, i) => `<tr data-code="${x.code}">
+    document.querySelector('#zt-result').innerHTML = `<div class="table-wrap wide"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>板块</th><th>行业</th><th data-sort="lbc" style="cursor:pointer" title="点击排序">连板 ⇅</th><th>龙虎榜</th><th data-sort="zdp" style="cursor:pointer" title="点击排序">涨跌幅 ⇅</th><th>最新价</th><th data-sort="amountYi" style="cursor:pointer" title="点击排序">成交额(亿) ⇅</th><th>流通市值(亿)</th><th data-sort="hs" style="cursor:pointer" title="点击排序">换手% ⇅</th><th data-sort="volumeRatio" style="cursor:pointer" title="点击排序">量比 ⇅</th><th data-sort="fundYi" style="cursor:pointer" title="点击排序">封单(亿) ⇅</th><th>封单/成交</th><th data-sort="firstTime" style="cursor:pointer" title="点击排序">首封 ⇅</th><th>末封</th><th data-sort="zbc" style="cursor:pointer" title="点击排序">炸板 ⇅</th><th>涨停统计</th><th>新高</th></tr></thead><tbody>${visible.map((x, i) => `<tr data-code="${x.code}">
     <td>${i + 1}</td><td>${x.code}</td><td><b>${escape(x.name)}</b></td><td>${escape(x.board)}</td><td>${escape(x.industry)}</td>
     <td><strong class="score">${x.lbc}板</strong></td>
     <td>${x.lhb ? '<b style="color:var(--red)">🔥</b>' : ''}</td>
@@ -1029,6 +1032,18 @@ function renderZTPoolPage(data) {
     <td>${x.firstTime}</td><td>${x.lastTime}</td><td>${x.zbc}</td><td>${escape(x.zttj)}</td>
     <td>${x.newHigh === true ? '📈' : ''}</td>
     </tr>`).join('')}</tbody></table></div>`;
+    }
+    // 加载更多（分页）
+    const moreHtml = rows.length > ztShown
+      ? `<div style="text-align:center;padding:10px 0 4px"><button id="ztMoreBtn" class="btn">加载更多（还剩 ${rows.length - ztShown} 条）</button></div>`
+      : (ztShown > ZT_PAGE && rows.length ? `<p class="report-note" style="text-align:center">已全部加载（共 ${rows.length} 条）</p>` : '');
+    const wrap = document.querySelector('#zt-result');
+    if (wrap) {
+      const holder = document.createElement('div');
+      holder.innerHTML = moreHtml;
+      wrap.appendChild(holder);
+      const btn = holder.querySelector('#ztMoreBtn');
+      if (btn) btn.addEventListener('click', () => { ztShown += ZT_PAGE; renderZT(currentRows); });
     }
     // 连板梯队
     const ladder = {};
@@ -1053,6 +1068,7 @@ function renderZTPoolPage(data) {
     );
     rows = [...rows].sort((a, b) => (b.lbc - a.lbc) || (a.firstTime.localeCompare(b.firstTime)));
     currentRows = rows;
+    ztShown = ZT_PAGE;
     renderZT(rows);
   };
   // B2: 列排序
@@ -1069,6 +1085,7 @@ function renderZTPoolPage(data) {
       return ztSortDir * (va - vb);
     });
     currentRows = sorted;
+    ztShown = ZT_PAGE;
     renderZT(currentRows);
   });
   applyFilter();
@@ -1088,6 +1105,25 @@ function renderZTPoolPage(data) {
     const ds = v.replace(/-/g, '');
     location.hash = '#/zt?' + ds;
   };
+  // 日期快捷选择：今天 / 昨天 / 最近历史交易日
+  (async () => {
+    const holder = document.querySelector('#zt-quick-dates');
+    if (!holder) return;
+    const cur = data.date;
+    const mk = (label, ds, active) => `<button class="zt-qd ${active ? 'active' : ''}" data-ds="${ds}" style="border:1px solid var(--line);border-radius:99px;padding:3px 10px;font-size:12px;background:${active ? 'var(--blue)' : 'var(--card)'};color:${active ? '#fff' : 'var(--text)'};cursor:pointer;margin-left:4px">${label}</button>`;
+    let html = '';
+    const today = new Date(); const tds = today.toISOString().slice(0, 10).replace(/-/g, '');
+    if (cur !== tds) html += mk('今天', tds, false);
+    try {
+      const h = await api('/ztpool/history');
+      const list = (h.history || []).filter(x => x.date !== cur).slice(0, 5);
+      const yesterday = list.find(x => x.date < cur);
+      if (yesterday) html += mk('昨天', yesterday.date, false);
+      list.forEach(x => html += mk(x.date.slice(4, 6) + '/' + x.date.slice(6, 8) + ' (' + x.total + '只)', x.date, false));
+    } catch {}
+    holder.innerHTML = html || '';
+    holder.querySelectorAll('.zt-qd').forEach(b => b.onclick = () => { location.hash = '#/zt?' + b.dataset.ds; });
+  })();
   document.querySelector('#zt-refresh').onclick = async () => {
     notice('正在刷新…');
     try { const fresh = await api('/ztpool?force=1'); pool = fresh.pool || []; renderZTPoolPage(fresh); } catch (e) { notice(e.message); }
