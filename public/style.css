@@ -791,6 +791,15 @@ textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-glo
   font-size: 13px;
 }
 
+/* ========== Scroll Progress ========== */
+#scrollProgress {
+  position: fixed; top: 0; left: 0; height: 3px; width: 0;
+  background: linear-gradient(90deg, var(--blue), #7b9df0);
+  z-index: 400; border-radius: 0 2px 2px 0;
+  opacity: 0; transition: opacity .2s;
+}
+#scrollProgress.show { opacity: 1; }
+
 /* ========== Back to Top ========== */
 #backTopBtn {
   position: fixed; right: 22px; bottom: 26px; z-index: 300;

@@ -2271,6 +2271,22 @@ AlertNotifier.init();
   btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 })();
 
+// --- 顶部滚动进度条（全局） ---
+(function initScrollProgress() {
+  const bar = document.createElement('div');
+  bar.id = 'scrollProgress';
+  document.body.appendChild(bar);
+  const update = () => {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    const pct = max > 0 ? (window.scrollY / max) * 100 : 0;
+    bar.style.width = pct + '%';
+    bar.classList.toggle('show', window.scrollY > 40);
+  };
+  window.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update, { passive: true });
+  update();
+})();
+
 // --- 宽表鼠标拖拽横向滚动（P2-15）---
 (function initDragScroll() {
   let suppressClick = false;

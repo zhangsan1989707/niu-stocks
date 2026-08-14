@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leostocks 滚动与长页面体验优化地图</title>
+<style>
+  :root { --bg:#f7f8fa; --card:#fff; --text:#1f2329; --muted:#86909c; --line:#e5e7eb; --blue:#3b82f6; --blue-d:#2563eb; --green:#16a34a; --yellow:#d97706; --red:#dc2626; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); line-height:1.65; padding:32px 18px 60px; }
+  .wrap { max-width:960px; margin:0 auto; }
+  h1 { font-size:26px; margin-bottom:6px; }
+  .sub { color:var(--muted); margin-bottom:24px; font-size:14px; }
+  h2 { font-size:19px; margin:34px 0 14px; padding-left:10px; border-left:4px solid var(--blue); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:14px; }
+  .card h3 { font-size:16px; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+  .tag { display:inline-block; font-size:12px; padding:2px 9px; border-radius:99px; font-weight:600; margin-left:auto; }
+  .tag.p0 { background:#dcfce7; color:var(--green); }
+  .tag.p1 { background:#fef3c7; color:var(--yellow); }
+  .tag.p2 { background:#fee2e2; color:var(--red); }
+  .done { background:#e0e7ff; color:var(--blue-d); }
+  .tag.done { background:#e0e7ff; color:var(--blue-d); }
+  .card p { color:#374151; font-size:14px; }
+  .card .eff { color:var(--muted); font-size:12.5px; margin-top:6px; }
+  .status { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:7px; }
+  .s-done { background:var(--blue); } .s-todo { background:#cbd5e1; }
+  table { width:100%; border-collapse:collapse; margin-top:8px; font-size:13.5px; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12.5px; white-space:nowrap; }
+  .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:18px 0; }
+  .metric { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; text-align:center; }
+  .metric b { display:block; font-size:22px; color:var(--blue-d); }
+  .metric span { font-size:12.5px; color:var(--muted); }
+  .footer { color:var(--muted); font-size:12.5px; margin-top:30px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📜 滚动与长页面体验优化地图</h1>
+  <div class="sub">Leostocks 全站 · 2026-08-14 · 基于页面结构盘点（涨停 92 行大表 / 体检报告 12+ 卡片 / 验证 3 张表 / 选股漏斗）</div>
+
+  <div class="metrics">
+    <div class="metric"><b>5</b><span>已完成</span></div>
+    <div class="metric"><b>7</b><span>待实施（按性价比排序）</span></div>
+    <div class="metric"><b>3</b><span>需改造架构</span></div>
+  </div>
+
+  <h2>一、滚动体验（你的方向，已铺开）</h2>
+  <div class="card"><h3><span class="status s-done"></span>回到顶部按钮 <span class="tag done">已完成</span></h3>
+    <p>滚动超一屏右下角浮现 ↑，点击平滑回顶。全站生效。</p></div>
+  <div class="card"><h3><span class="status s-done"></span>顶部滚动进度条 <span class="tag done">已完成</span></h3>
+    <p>页面顶部 3px 蓝色进度条，实时显示阅读位置，知道还有多长。</p></div>
+  <div class="card"><h3><span class="status s-done"></span>返回记住滚动位置 <span class="tag done">已完成</span></h3>
+    <p>页面切换后再回来，自动恢复之前的滚动位置（350ms 后恢复）。</p></div>
+
+  <h2>二、翻动类优化（同方向，你没想到的）</h2>
+  <div class="card"><h3><span class="status s-todo"></span>吸顶表头（正确版）<span class="tag p1">P1</span></h3>
+    <p>之前的 sticky 实现遮挡第一行已回退。正确方案：表格区域改为"独立垂直滚动容器"（固定高度 + overflow-y），表头 sticky 在容器内，页面整页滚动和表格内部滚动分离。</p>
+    <div class="eff">收益：涨停 20 列大表滚动时始终看得见列名 | 代价：改 3 处 CSS + 容器高度自适应</div></div>
+  <div class="card"><h3><span class="status s-todo"></span>涨停页分页 / 加载更多 <span class="tag p0">P0</span></h3>
+    <p>92 行全部渲染，DOM 重、滚动长。改为每页 30 行 + "加载更多"按钮（保留当前全部筛选排序逻辑）。</p>
+    <div class="eff">收益：渲染提速、滚动距离减 2/3、移动端流畅度明显提升</div></div>
+  <div class="card"><h3><span class="status s-todo"></span>快捷键滚动 <span class="tag p0">P0</span></h3>
+    <p>桌面端：<b>空格/PageDown</b> 翻页、<b>Home/End</b> 回顶/到底（浏览器原生已支持，可补充 Ctrl+↑ 回顶等）。移动端无。</p></div>
+  <div class="card"><h3><span class="status s-todo"></span>体检报告锚点目录 <span class="tag p2">P2</span></h3>
+    <p>报告页 12 个维度 + 形态 + K线，右侧/顶部悬浮"章节索引"，点击平滑跳到对应卡片。</p>
+    <div class="eff">收益：长报告精准定位，不用翻完整页 | 代价：需要给卡片加 id + 目录组件</div></div>
+
+  <h2>三、同类"省事"体验（与翻动同级，一并建议）</h2>
+  <div class="card"><h3><span class="status s-todo"></span>加载骨架屏 <span class="tag p0">P0</span></h3>
+    <p>涨停/选股/报告加载时显示灰色骨架块，代替空白 + 转圈，消除"页面跳变"感。</p></div>
+  <div class="card"><h3><span class="status s-todo"></span>请求失败自动重试 <span class="tag p1">P1</span></h3>
+    <p>腾讯接口 501 限流时，前端自动退避重试 1-2 次，失败再提示，不打断操作流。</p></div>
+  <div class="card"><h3><span class="status s-todo"></span>日期快捷选择 <span class="tag p0">P0</span></h3>
+    <p>涨停页日期框旁加"今天 / 昨天 / 本周"一键切换，减少日历操作。</p></div>
+  <div class="card"><h3><span class="status s-todo"></span>数字格式统一 <span class="tag p1">P1</span></h3>
+    <p>成交额/市值千分位（1.23亿→1.23亿 统一）、涨幅统一带符号、全站涨红跌绿一致性巡检。</p></div>
+
+  <h2>四、需架构改造（暂缓，说明原因）</h2>
+  <div class="card"><h3>虚拟滚动 <span class="tag p2">P2</span></h3>
+    <p>只渲染可视区行（92 行目前不值得）。若未来列表上千行再上。</p></div>
+  <div class="card"><h3>列宽记忆 <span class="tag p2">P2</span></h3>
+    <p>用户拖列宽后 localStorage 记住。当前列宽固定，优先级低。</p></div>
+  <div class="card"><h3>跨会话阅读续点 <span class="tag p2">P2</span></h3>
+    <p>刷新/次日打开恢复上次位置。当前"返回恢复"已覆盖同会话，跨会话意义有限。</p></div>
+
+  <div class="footer">Leostocks UX 优化地图 · 每项标注 P0 立即可做 / P1 低风险 / P2 需设计 · 已实施项当日生效</div>
+</div>
+</body>
+</html>
