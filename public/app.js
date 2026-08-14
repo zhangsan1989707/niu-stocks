@@ -464,13 +464,15 @@ function checkPage() {
     const reportSlot = document.querySelector('#report-slot');
     reportSlot.innerHTML = '';
     const _tk = Date.now();
-    const fetchP = api(`/stocks/${target}/report`).then(j => ({ j }));
     // C2: 快速模式（第 3 次体检后默认跳过动画）
     let fastMode = false;
     try { const c = Number(localStorage.getItem('leostocks_checks') || 0); localStorage.setItem('leostocks_checks', String(c + 1)); fastMode = c >= 2; } catch {}
     let j = null, aborted = false;
     if (fastMode) { try { j = await api(`/stocks/${target}/report`); } catch { j = null; } }
-    else { const r = await playScanAnim(scanSlot, fetchP, { title: '个股体检中', alive: () => true }); j = r.j; aborted = r.aborted; }
+    else {
+      const fetchP = api(`/stocks/${target}/report`).then(j => ({ j }));
+      const r = await playScanAnim(scanSlot, fetchP, { title: '个股体检中', alive: () => true }); j = r.j; aborted = r.aborted;
+    }
     if (aborted) return;
     if (!j) { notice('体检失败，请稍后重试'); return; }
     renderReport(j);
@@ -1003,6 +1005,41 @@ function renderZTPoolPage(data) {
     <p style="color:var(--muted);font-size:12.5px">⚠️ ${escape(data.disclaimer || '仅供研究')}</p>`);
 
   let currentRows = pool;
+  // 渲染涨停列表（表格/卡片/梯队）——供过滤与排序共用
+  const renderZT = rows => {
+    const isMobile = window.innerWidth < 760;
+    if (isMobile) {
+    document.querySelector('#zt-result').innerHTML = rows.length ? `<div class="smart-cards">${rows.map(x => `
+    <div class="smart-card" data-code="${x.code}">
+    <div style="display:flex;align-items:center;gap:8px"><b>${escape(x.name)}</b><small style="color:var(--muted)">${x.code}</small><span style="margin-left:auto" class="lightdot ${x.lbc >= 3 ? 'red' : 'yellow'}">${x.lbc}板</span></div>
+    <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)">
+    <span>${escape(x.board)}</span><span>${escape(x.industry)}</span><span class="up">+${x.zdp}%</span><span>封单比 ${x.fundRatio ?? '—'}</span>
+    <span>换手 ${x.hs}%</span><span>量比 ${x.volumeRatio ?? '—'}</span><span>炸板 ${x.zbc}</span><span>首封 ${x.firstTime}</span>
+    <span>${x.lhb ? '🔥龙虎榜' : ''}${x.newHigh === true ? ' 📈新高' : ''}</span>
+    </div>
+    </div>`).join('')}</div>` : '<p class="empty">无符合条件的涨停股</p>';
+    } else {
+    document.querySelector('#zt-result').innerHTML = `<div class="table-wrap wide"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>板块</th><th>行业</th><th data-sort="lbc" style="cursor:pointer" title="点击排序">连板 ⇅</th><th>龙虎榜</th><th data-sort="zdp" style="cursor:pointer" title="点击排序">涨跌幅 ⇅</th><th>最新价</th><th data-sort="amountYi" style="cursor:pointer" title="点击排序">成交额(亿) ⇅</th><th>流通市值(亿)</th><th data-sort="hs" style="cursor:pointer" title="点击排序">换手% ⇅</th><th data-sort="volumeRatio" style="cursor:pointer" title="点击排序">量比 ⇅</th><th data-sort="fundYi" style="cursor:pointer" title="点击排序">封单(亿) ⇅</th><th>封单/成交</th><th data-sort="firstTime" style="cursor:pointer" title="点击排序">首封 ⇅</th><th>末封</th><th data-sort="zbc" style="cursor:pointer" title="点击排序">炸板 ⇅</th><th>涨停统计</th><th>新高</th></tr></thead><tbody>${rows.map((x, i) => `<tr data-code="${x.code}">
+    <td>${i + 1}</td><td>${x.code}</td><td><b>${escape(x.name)}</b></td><td>${escape(x.board)}</td><td>${escape(x.industry)}</td>
+    <td><strong class="score">${x.lbc}板</strong></td>
+    <td>${x.lhb ? '<b style="color:var(--red)">🔥</b>' : ''}</td>
+    <td class="up">+${x.zdp}%</td><td>${x.price}</td>
+    <td>${x.amountYi}</td><td>${x.ltszYi}</td><td>${x.hs}</td><td>${x.volumeRatio ?? '—'}</td>
+    <td>${x.fundYi}</td><td>${x.fundRatio ?? '—'}</td>
+    <td>${x.firstTime}</td><td>${x.lastTime}</td><td>${x.zbc}</td><td>${escape(x.zttj)}</td>
+    <td>${x.newHigh === true ? '📈' : ''}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+    }
+    // 连板梯队
+    const ladder = {};
+    rows.forEach(x => { ladder[x.lbc] = (ladder[x.lbc] || 0) + 1; });
+    const ladderHtml = Object.entries(ladder).sort((a, b) => Number(b[0]) - Number(a[0])).map(([lb, cnt]) => {
+    const names = rows.filter(x => x.lbc === Number(lb)).slice(0, 8).map(x => escape(x.name)).join('、');
+    return `<span class="patchip ${Number(lb) >= 3 ? 'bear' : 'neu'}" style="margin:2px" title="${names}${rows.filter(x => x.lbc === Number(lb)).length > 8 ? '…' : ''}">${lb}板 × ${cnt}</span>`;
+    }).join('');
+    document.querySelector('#zt-ladder').innerHTML = ladderHtml ? `<div class="checkdone">📶 连板梯队：${ladderHtml}</div>` : '';
+  };
+
   const applyFilter = () => {
     const minLbc = Number(document.querySelector('#zt-minlbc').value || 1);
     const board = document.querySelector('.zt-filter.active')?.dataset.board || '全部';
@@ -1016,37 +1053,7 @@ function renderZTPoolPage(data) {
     );
     rows = [...rows].sort((a, b) => (b.lbc - a.lbc) || (a.firstTime.localeCompare(b.firstTime)));
     currentRows = rows;
-    const isMobile = window.innerWidth < 760;
-    if (isMobile) {
-      document.querySelector('#zt-result').innerHTML = rows.length ? `<div class="smart-cards">${rows.map(x => `
-        <div class="smart-card" data-code="${x.code}">
-          <div style="display:flex;align-items:center;gap:8px"><b>${escape(x.name)}</b><small style="color:var(--muted)">${x.code}</small><span style="margin-left:auto" class="lightdot ${x.lbc >= 3 ? 'red' : 'yellow'}">${x.lbc}板</span></div>
-          <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)">
-            <span>${escape(x.board)}</span><span>${escape(x.industry)}</span><span class="up">+${x.zdp}%</span><span>封单比 ${x.fundRatio ?? '—'}</span>
-            <span>换手 ${x.hs}%</span><span>量比 ${x.volumeRatio ?? '—'}</span><span>炸板 ${x.zbc}</span><span>首封 ${x.firstTime}</span>
-            <span>${x.lhb ? '🔥龙虎榜' : ''}${x.newHigh === true ? ' 📈新高' : ''}</span>
-          </div>
-        </div>`).join('')}</div>` : '<p class="empty">无符合条件的涨停股</p>';
-    } else {
-      document.querySelector('#zt-result').innerHTML = `<div class="table-wrap wide"><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>板块</th><th>行业</th><th data-sort="lbc" style="cursor:pointer" title="点击排序">连板 ⇅</th><th>龙虎榜</th><th data-sort="zdp" style="cursor:pointer" title="点击排序">涨跌幅 ⇅</th><th>最新价</th><th data-sort="amountYi" style="cursor:pointer" title="点击排序">成交额(亿) ⇅</th><th>流通市值(亿)</th><th data-sort="hs" style="cursor:pointer" title="点击排序">换手% ⇅</th><th data-sort="volumeRatio" style="cursor:pointer" title="点击排序">量比 ⇅</th><th data-sort="fundYi" style="cursor:pointer" title="点击排序">封单(亿) ⇅</th><th>封单/成交</th><th data-sort="firstTime" style="cursor:pointer" title="点击排序">首封 ⇅</th><th>末封</th><th data-sort="zbc" style="cursor:pointer" title="点击排序">炸板 ⇅</th><th>涨停统计</th><th>新高</th></tr></thead><tbody>${rows.map((x, i) => `<tr data-code="${x.code}">
-        <td>${i + 1}</td><td>${x.code}</td><td><b>${escape(x.name)}</b></td><td>${escape(x.board)}</td><td>${escape(x.industry)}</td>
-        <td><strong class="score">${x.lbc}板</strong></td>
-        <td>${x.lhb ? '<b style="color:var(--red)">🔥</b>' : ''}</td>
-        <td class="up">+${x.zdp}%</td><td>${x.price}</td>
-        <td>${x.amountYi}</td><td>${x.ltszYi}</td><td>${x.hs}</td><td>${x.volumeRatio ?? '—'}</td>
-        <td>${x.fundYi}</td><td>${x.fundRatio ?? '—'}</td>
-        <td>${x.firstTime}</td><td>${x.lastTime}</td><td>${x.zbc}</td><td>${escape(x.zttj)}</td>
-        <td>${x.newHigh === true ? '📈' : ''}</td>
-      </tr>`).join('')}</tbody></table></div>`;
-    }
-    // 连板梯队
-    const ladder = {};
-    rows.forEach(x => { ladder[x.lbc] = (ladder[x.lbc] || 0) + 1; });
-    const ladderHtml = Object.entries(ladder).sort((a, b) => Number(b[0]) - Number(a[0])).map(([lb, cnt]) => {
-      const names = rows.filter(x => x.lbc === Number(lb)).slice(0, 8).map(x => escape(x.name)).join('、');
-      return `<span class="patchip ${Number(lb) >= 3 ? 'bear' : 'neu'}" style="margin:2px" title="${names}${rows.filter(x => x.lbc === Number(lb)).length > 8 ? '…' : ''}">${lb}板 × ${cnt}</span>`;
-    }).join('');
-    document.querySelector('#zt-ladder').innerHTML = ladderHtml ? `<div class="checkdone">📶 连板梯队：${ladderHtml}</div>` : '';
+    renderZT(rows);
   };
   // B2: 列排序
   let ztSortKey = '', ztSortDir = 1;
@@ -1062,7 +1069,7 @@ function renderZTPoolPage(data) {
       return ztSortDir * (va - vb);
     });
     currentRows = sorted;
-    applyFilter();
+    renderZT(currentRows);
   });
   applyFilter();
 
@@ -2097,7 +2104,7 @@ function router() {
   if (['zt', 'smart', 'screen', 'portfolio'].includes(path)) {
     try {
       const v = sessionStorage.getItem('scroll_' + path);
-      if (v != null) setTimeout(() => window.scrollTo(0, Number(v) || 0), 350);
+      if (v != null) { setTimeout(() => window.scrollTo(0, Number(v) || 0), 350); try { sessionStorage.removeItem('scroll_' + path); } catch {} }
     } catch {}
   }
 }
