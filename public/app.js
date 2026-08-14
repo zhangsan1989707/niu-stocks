@@ -26,6 +26,15 @@ function restoreScroll(delay = 300) {
 }
 function card(title, body, cls='') { return `<article class="card ${cls}">${title ? `<h2>${title}</h2>` : ''}${body}</article>`; }
 function loading() { app.innerHTML = '<section class="page"><div class="loading">正在读取市场数据…</div></section>'; }
+// 骨架屏生成器
+function skeletonTable(rows) {
+  return '<div class="skel-table">' + Array.from({ length: rows }, () =>
+    '<div class="row">' + Array.from({ length: 7 }, () => '<div class="skel"></div>').join('') + '</div>').join('') + '</div>';
+}
+function skeletonCards(n) {
+  return '<div class="skel-card-grid">' + Array.from({ length: n }, () =>
+    '<div class="skel-card">' + Array.from({ length: 4 }, () => '<div class="skel"></div>').join('') + '</div>').join('') + '</div>';
+}
 
 // --- 形态标签 ---
 /**
@@ -1149,7 +1158,7 @@ function renderZTPoolPage(data) {
 async function ztPage() {
   const dateParam = location.hash.split('?')[1] || '';
   const wantDate = /^\d{8}$/.test(dateParam) ? dateParam : '';
-  app.innerHTML = '<section class="page"><div class="loading">正在获取涨停股池…</div></section>';
+  app.innerHTML = '<section class="page"><div class="intro">正在获取涨停股池…</div>' + skeletonTable(8) + '</section>';
   let data;
   try { data = await api('/ztpool' + (wantDate ? '?date=' + wantDate : '')); }
   catch (e) { checkPage(); return notice(e.message); }
@@ -1157,7 +1166,7 @@ async function ztPage() {
 }
 
 async function smartPage() {
-  app.innerHTML = '<section class="page"><div class="loading">🔭 正在扫描全市场（约 5500 只）——首次运行约需 30-60 秒，请稍候…</div></section>';
+  app.innerHTML = '<section class="page"><div class="loading">🔭 正在扫描全市场（约 5500 只）——首次运行约需 30-60 秒，请稍候…</div></section>' + skeletonCards(6);
   let data;
   try { data = await api('/screen/v2'); }
   catch (e) { checkPage(); return notice(e.message); }

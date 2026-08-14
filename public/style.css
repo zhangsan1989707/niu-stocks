@@ -800,6 +800,23 @@ textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-glo
 }
 #scrollProgress.show { opacity: 1; }
 
+/* ========== Skeleton ========== */
+.skel { position: relative; overflow: hidden; background: var(--line); border-radius: 6px; }
+.skel::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent); animation: skelShimmer 1.4s infinite; }
+@keyframes skelShimmer { 100% { transform: translateX(100%); } }
+.skel-table { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px 16px; margin-top: 12px; }
+.skel-table .row { display: grid; grid-template-columns: 44px 76px 110px 1fr 1fr 76px 80px; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: center; }
+.skel-table .row:last-child { border-bottom: 0; }
+.skel-table .row .skel { height: 13px; }
+.skel-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-top: 12px; }
+.skel-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.skel-card .skel { height: 13px; margin-bottom: 10px; }
+.skel-card .skel:last-child { width: 60%; margin-bottom: 0; }
+@media (max-width: 760px) {
+  .skel-table .row { grid-template-columns: 34px 56px 84px 1fr; gap: 10px; }
+}
+
 /* ========== Back to Top ========== */
 #backTopBtn {
   position: fixed; right: 22px; bottom: 26px; z-index: 300;
