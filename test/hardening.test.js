@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const { validateConfig } = require('../lib/server/store');
 const { updateJson } = require('../lib/server/store');
 const { reportFrom } = require('../server');
+const { parseBaiduKlines } = require('../lib/server/market');
+const { limitPct } = require('../lib/server/portfolio-backtest');
 
 test('策略配置只接受已知且处于安全范围内的数值', () => {
   const result = validateConfig({ macdFast: 8, ma60Period: 90, healthScoreThreshold: 72, extra: 1 });
@@ -37,4 +39,17 @@ test('经典图表形态维度不会误报蜡烛形态数量', () => {
   const report = reportFrom({ code: '600519', name: '测试', price: 22, volumeRatio: 1, turnoverPct: 1 }, candles);
   const classic = report.scan_dims.find(item => item.key === 'patterns');
   assert.ok(!classic.note.includes('蜡烛形态'));
+});
+
+test('百度 K 线兜底可解析公开 keys/marketData 格式', () => {
+  const rows = parseBaiduKlines({ Result: { newMarketData: { keys: ['time', 'open', 'close', 'high', 'low', 'volume'], marketData: '2026-10-15,10,10.5,10.8,9.9,1234' } } });
+  assert.deepEqual(rows, [{ date: '2026-10-15', open: 10, close: 10.5, high: 10.8, low: 9.9, volume: 1234 }]);
+});
+
+test('涨跌停阈值按 A 股板块区分', () => {
+  assert.equal(limitPct('600519'), 9.8);
+  assert.equal(limitPct('300750'), 19.8);
+  assert.equal(limitPct('688001'), 19.8);
+  assert.equal(limitPct('830001'), 29.8);
+  assert.equal(limitPct('600001', '*ST 测试'), 4.8);
 });
