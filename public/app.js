@@ -1816,7 +1816,7 @@ async function portfolioPage() {
 
     // 持仓表格
     const rows = positions.length ? positions.map(p => `
-      <tr data-id="${p.id}">
+      <tr data-id="${p.id}" data-code="${p.code}">
         <td><b>${escape(p.name)}</b><br><small>${p.code}</small></td>
         <td>${p.shares}</td>
         <td>¥${fmt(p.costPrice)}</td>

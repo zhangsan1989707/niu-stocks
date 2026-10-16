@@ -6,6 +6,8 @@ const { updateJson } = require('../lib/server/store');
 const { reportFrom } = require('../server');
 const { parseBaiduKlines } = require('../lib/server/market');
 const { limitPct } = require('../lib/server/portfolio-backtest');
+const { readFile } = require('node:fs/promises');
+const { join } = require('node:path');
 
 test('策略配置只接受已知且处于安全范围内的数值', () => {
   const result = validateConfig({ macdFast: 8, ma60Period: 90, healthScoreThreshold: 72, extra: 1 });
@@ -52,4 +54,9 @@ test('涨跌停阈值按 A 股板块区分', () => {
   assert.equal(limitPct('688001'), 19.8);
   assert.equal(limitPct('830001'), 29.8);
   assert.equal(limitPct('600001', '*ST 测试'), 4.8);
+});
+
+test('持仓行携带股票代码，整行点击可打开对应体检页', async () => {
+  const app = await readFile(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(app, /<tr data-id="\$\{p\.id\}" data-code="\$\{p\.code\}">/);
 });
